@@ -65,8 +65,8 @@ export const GameView: React.FC = () => {
   const [videoAdVisible, setVideoAdVisible] = useState(false);
   const [activeCoinId, setActiveCoinId] = useState<string | null>(null);
   const [isVideoForStart, setIsVideoForStart] = useState(false);
-  const [adTimeRemaining, setAdTimeRemaining] = useState(60);
-  const [maxAdDuration, setMaxAdDuration] = useState(60);
+  const [adTimeRemaining, setAdTimeRemaining] = useState(1);
+  const [maxAdDuration, setMaxAdDuration] = useState(1);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerInstance = useRef<any>(null);
@@ -131,8 +131,8 @@ export const GameView: React.FC = () => {
     adFinishedRef.current = false;
     setIsVideoForStart(forStart);
     isVideoForStartRef.current = forStart;
-    setAdTimeRemaining(60); // Default fallback
-    setMaxAdDuration(60);
+    setAdTimeRemaining(30); // Placeholder until detected
+    setMaxAdDuration(30);
     setVideoAdVisible(true);
   };
 
@@ -146,11 +146,18 @@ export const GameView: React.FC = () => {
         layoutControls: {
           fillToContainer: true,
           autoPlay: true,
-          mute: false,
+          mute: true,
           allowDownload: false,
           playbackRateControl: false,
           persistentSettings: { volume: false },
-          adProgressbarColor: '#00f3ff'
+          adProgressbarColor: '#00f3ff',
+          playButton: false, // Remove play button
+          playPauseAnimation: false,
+          controlBar: {
+            autoHide: true,
+            autoHideTimeout: 0,
+            animated: false
+          }
         },
         vastOptions: {
           adList: [
@@ -160,38 +167,40 @@ export const GameView: React.FC = () => {
             }
           ],
           adStartedCallback: () => {
-            console.log("Fluid Player: Ad Started. Syncing duration with Overview panel...");
-            // Detect actual ad duration from the video element Fluid Player uses
+            console.log("Fluid Player: Ad Started. Synchronizing duration...");
+            
+            // Poll for actual duration
             durationCheckInterval = setInterval(() => {
               const videoElement = videoRef.current;
-              if (videoElement && videoElement.duration && videoElement.duration > 0 && videoElement.duration !== Infinity) {
-                const actualDuration = Math.ceil(videoElement.duration);
-                console.log(`Detected duration: ${actualDuration}s`);
+              // Fluid player might replace the source or use a different element internally
+              // We attempt to find the active video element if the ref isn't updating
+              const activeVideo = document.querySelector('.fluid_video_wrapper video') as HTMLVideoElement;
+              const target = activeVideo || videoElement;
+
+              if (target && target.duration && target.duration > 0 && target.duration !== Infinity) {
+                const actualDuration = Math.ceil(target.duration);
+                console.log(`Overview: Detected duration ${actualDuration}s`);
                 setAdTimeRemaining(actualDuration);
                 setMaxAdDuration(actualDuration);
                 clearInterval(durationCheckInterval);
               }
-            }, 200);
+            }, 100);
             
-            // Timeout safety for duration check
-            setTimeout(() => clearInterval(durationCheckInterval), 5000);
+            // Fallback timeout for duration detection
+            setTimeout(() => clearInterval(durationCheckInterval), 8000);
           },
           adFinishedCallback: () => {
-            console.log("Fluid Player: Ad Finished naturally. Triggering Overview completion.");
+            console.log("Fluid Player: Ad Finished. Auto-closing.");
             handleRewardOnAdFinish();
           }
         }
       });
 
-      // Overview UI countdown synchronizer
+      // UI countdown logic
       countdownInterval = setInterval(() => {
         setAdTimeRemaining(prev => {
           if (prev <= 1) {
-            // If the timer reaches zero and the ad is still somehow running, we force close for user experience
-            if (!adFinishedRef.current) {
-               console.log("Overview: Timer expired. Auto-terminating player.");
-               handleRewardOnAdFinish();
-            }
+            // Check if player reported finish already
             return 0;
           }
           return prev - 1;
@@ -279,26 +288,24 @@ export const GameView: React.FC = () => {
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
-      {/* OVERVIEW VIDEO MODAL - HIGH PRIORITY UI */}
+      {/* VIDEO AD MODAL - Overview Branding */}
       {videoAdVisible && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/98 backdrop-blur-2xl animate-in fade-in duration-300">
-          <div className="w-full max-w-6xl bg-black border-2 border-[#00f3ff]/50 shadow-[0_0_150px_rgba(0,243,255,0.2)] relative overflow-hidden flex flex-col">
+          <div className="w-full max-w-6xl bg-black border-2 border-[#00f3ff]/60 shadow-[0_0_200px_rgba(0,243,255,0.25)] relative overflow-hidden flex flex-col">
             
-            {/* Overview Header */}
+            {/* Overview Header - NO CLOSE BUTTON */}
             <div className="p-5 border-b border-[#00f3ff]/30 flex justify-between items-center bg-[#050505] z-[1001]">
                <div className="flex items-center gap-4">
                  <LayoutPanelLeft className="text-[#00f3ff] animate-pulse" size={24} />
                  <span className="text-[14px] font-black uppercase tracking-[0.5em] neon-glow-cyan">Overview</span>
                </div>
-               <div className="flex items-center gap-6">
-                  <div className="h-6 w-[2px] bg-white/10" />
-                  <button onClick={() => setVideoAdVisible(false)} className="text-[#ff00ff] hover:text-white transition-all transform hover:rotate-90">
-                    <X size={28} />
-                  </button>
+               <div className="flex items-center gap-4">
+                  <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_10px_red]" />
+                  <span className="text-[10px] font-black text-red-500/80 uppercase tracking-widest">SYSTEM_LOCKED</span>
                </div>
             </div>
 
-            {/* OVERVIEW DATA TRANSFER STATUS */}
+            {/* Overview Panel - Data transfer process */}
             <div className="relative w-full z-[1000] bg-black/90 backdrop-blur-xl border-b border-[#00f3ff]/20 p-8 flex items-center justify-between shadow-2xl overflow-hidden">
                <div className="absolute inset-0 pointer-events-none opacity-5">
                   <div className="w-full h-full bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,#00f3ff_2px,#00f3ff_3px)]" />
@@ -307,12 +314,12 @@ export const GameView: React.FC = () => {
                <div className="flex items-center gap-8 relative">
                   <div className="relative">
                     <div className="absolute inset-0 bg-[#00f3ff]/20 blur-3xl animate-ping" />
-                    <Share2 size={42} className="text-[#00f3ff] relative animate-pulse" />
+                    <Cpu size={42} className="text-[#00f3ff] relative animate-pulse" />
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[18px] font-black uppercase tracking-[0.4em] text-[#00f3ff] mb-1">OVERVIEW: PŘENOS DAT</span>
+                    <span className="text-[18px] font-black uppercase tracking-[0.4em] text-[#00f3ff] mb-1">Data transfer is in progress.</span>
                     <div className="flex items-center gap-3">
-                       <span className="text-[11px] text-white/40 uppercase tracking-[0.2em] font-black">UPLINK_SYNCHRONIZATION_ACTIVE</span>
+                       <span className="text-[11px] text-white/40 uppercase tracking-[0.2em] font-black">UPLINK_STABILITY_MONITOR</span>
                        <div className="flex items-center gap-1.5">
                           <div className="w-1.5 h-1.5 bg-[#ff00ff] animate-bounce" style={{animationDelay: '0s'}} />
                           <div className="w-1.5 h-1.5 bg-[#ff00ff] animate-bounce" style={{animationDelay: '0.2s'}} />
@@ -324,7 +331,7 @@ export const GameView: React.FC = () => {
 
                <div className="flex items-center gap-12 relative">
                   <div className="text-right">
-                    <span className="text-[12px] text-white/40 uppercase font-black block mb-3 tracking-[0.1em]">ČAS DO DOKONČENÍ PŘENOSU</span>
+                    <span className="text-[12px] text-white/40 uppercase font-black block mb-3 tracking-[0.1em]">TRANSFER_COMPLETION_T_MINUS</span>
                     <div className="flex items-center gap-6">
                        <span className="text-5xl font-black text-[#ff00ff] tabular-nums tracking-widest drop-shadow-[0_0_20px_#ff00ff]">
                           {String(adTimeRemaining).padStart(2, '0')}<span className="text-sm ml-1 opacity-50 uppercase">sec</span>
@@ -340,7 +347,7 @@ export const GameView: React.FC = () => {
                </div>
             </div>
 
-            {/* Fluid Player Component Area */}
+            {/* Video Player Area */}
             <div className="aspect-video bg-[#000] relative flex flex-col items-center justify-center overflow-hidden z-0 shadow-[inset_0_0_100px_rgba(0,0,0,1)]">
                <div className="w-full h-full relative">
                   <video ref={videoRef} id="video-ad-player" className="w-full h-full">
@@ -351,24 +358,24 @@ export const GameView: React.FC = () => {
                </div>
             </div>
 
-            {/* Overview Technical Stats */}
+            {/* Overview Technical Footer */}
             <div className="p-4 bg-[#050505] flex justify-between items-center border-t border-white/10 px-10">
                <div className="flex items-center gap-8 opacity-40">
                   <div className="flex flex-col">
                     <span className="text-[8px] uppercase tracking-widest text-white/60">NODE_ID</span>
-                    <span className="text-[10px] uppercase tracking-[0.2em] font-black text-[#00f3ff]">0x7F_VAST_SYNC</span>
+                    <span className="text-[10px] uppercase tracking-[0.2em] font-black text-[#00f3ff]">0x7F_SECURE_OVERVIEW</span>
                   </div>
                   <div className="flex flex-col border-l border-white/10 pl-6">
-                    <span className="text-[8px] uppercase tracking-widest text-white/60">STATUS</span>
-                    <span className="text-[10px] uppercase tracking-[0.2em] font-black text-[#00f3ff]">AUTO_CLOSE_ON_FINISH</span>
+                    <span className="text-[8px] uppercase tracking-widest text-white/60">MODAL_STATUS</span>
+                    <span className="text-[10px] uppercase tracking-[0.2em] font-black text-[#00f3ff]">USER_INPUT_RESTRICTED</span>
                   </div>
                </div>
                <div className="flex items-center gap-4">
                   <div className="flex flex-col items-end">
-                    <span className="text-[8px] uppercase tracking-widest text-white/40">INTEGRITY</span>
-                    <span className="text-[10px] text-[#00f3ff] font-black uppercase tracking-widest">ENCRYPTED_LINK_v3.4</span>
+                    <span className="text-[8px] uppercase tracking-widest text-white/40">CONNECTION</span>
+                    <span className="text-[10px] text-[#00f3ff] font-black uppercase tracking-widest">AUTO_CLOSE_SYNC_v4.0</span>
                   </div>
-                  <Activity size={20} className="text-[#00f3ff] animate-pulse" />
+                  <Signal size={20} className="text-[#00f3ff] animate-pulse" />
                </div>
             </div>
           </div>
