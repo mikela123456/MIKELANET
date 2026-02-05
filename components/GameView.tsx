@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Sword, Package, Zap, Compass, Truck, Timer, Trophy, Shield, AlertTriangle, ChevronRight, Activity, Clock, Loader2, Coins, X, Terminal, Database, ShieldAlert as AlertIcon, PlayCircle, Lock, ExternalLink, RefreshCw, Eye, Signal, Volume2, HardDrive, Cpu, LayoutPanelLeft, Share2 } from 'lucide-react';
+import { User, Sword, Package, Zap, Compass, Truck, Timer, Trophy, Shield, AlertTriangle, ChevronRight, Activity, Clock, Loader2, Coins, X, Terminal, Database, ShieldAlert as AlertIcon, PlayCircle, Lock, ExternalLink, RefreshCw, Eye, Signal, Volume2, HardDrive, Cpu, LayoutPanelLeft, Share2, Radio } from 'lucide-react';
 import { AdBanner } from './AdBanner';
 
 type GameTab = 'profile' | 'expeditions' | 'items';
@@ -64,6 +64,7 @@ export const GameView: React.FC = () => {
   // Video Ad / Overview States
   const [videoAdVisible, setVideoAdVisible] = useState(false);
   const [adStarted, setAdStarted] = useState(false);
+  const [showManualStart, setShowManualStart] = useState(false);
   const [activeCoinId, setActiveCoinId] = useState<string | null>(null);
   const [isVideoForStart, setIsVideoForStart] = useState(false);
   const [adTimeRemaining, setAdTimeRemaining] = useState(0);
@@ -125,6 +126,7 @@ export const GameView: React.FC = () => {
     setVideoAdVisible(false);
     setIsFinalizing(false);
     setAdStarted(false);
+    setShowManualStart(false);
     if (playerInstance.current) {
       try { playerInstance.current.destroy(); } catch(e) {}
       playerInstance.current = null;
@@ -137,6 +139,7 @@ export const GameView: React.FC = () => {
     isVideoForStartRef.current = forStart;
     setIsFinalizing(false);
     setAdStarted(false);
+    setShowManualStart(false);
     setFinalizingTimeLeft(3);
     setAdTimeRemaining(0); 
     setMaxAdDuration(0);
@@ -145,15 +148,15 @@ export const GameView: React.FC = () => {
 
   useEffect(() => {
     let durationCheckInterval: ReturnType<typeof setInterval>;
+    let initialTimeout: ReturnType<typeof setTimeout>;
 
     if (videoAdVisible && videoRef.current) {
-      // Fluid Player must be available in window
       if (!window.fluidPlayer) {
-        console.error("Fluid Player script not found in window.");
+        console.error("Fluid Player not loaded.");
         return;
       }
 
-      // Initialize Player with maximum compatibility
+      // Initialize Player
       playerInstance.current = window.fluidPlayer(videoRef.current, {
         layoutControls: {
           fillToContainer: true,
@@ -163,7 +166,7 @@ export const GameView: React.FC = () => {
           playbackRateControl: false,
           persistentSettings: { volume: false },
           adProgressbarColor: '#00f3ff',
-          playButton: false,
+          playButton: true,
           playPauseAnimation: false,
           pauseOnClick: false,
           controlBar: {
@@ -176,10 +179,10 @@ export const GameView: React.FC = () => {
           adList: [{ roll: 'preRoll', vastTag: VIDEO_AD_URL }],
           allowVPAID: true,
           adStartedCallback: () => {
-            console.log("Fluid Player: Ad Started.");
+            console.log("Fluid Player: Broadcast Started.");
             setAdStarted(true);
+            setShowManualStart(false);
             
-            // Periodically check duration until valid
             durationCheckInterval = setInterval(() => {
               const activeVideo = document.querySelector('.fluid_video_wrapper video') as HTMLVideoElement;
               const target = activeVideo || videoRef.current;
@@ -189,33 +192,46 @@ export const GameView: React.FC = () => {
                 setMaxAdDuration(actualDuration);
                 clearInterval(durationCheckInterval);
               }
-            }, 300);
+            }, 500);
           },
           adFinishedCallback: () => {
-            console.log("Fluid Player: Ad Finished.");
             setIsFinalizing(true);
           },
           errorCallback: (err: any) => {
-            console.warn("Fluid Player: Ad Error/Blocked.", err);
-            // Fallback: If ad is blocked, start 15s fake transfer after 2s delay
-            setTimeout(() => {
-              setAdStarted(true);
-              setAdTimeRemaining(15);
-              setMaxAdDuration(15);
-            }, 2000);
+            console.warn("Fluid Player: Data Link Blocked.", err);
+            setShowManualStart(true);
           }
         }
       });
 
+      // If ad doesn't start in 1.5s, show manual start button to satisfy Autoplay requirements
+      initialTimeout = setTimeout(() => {
+        if (!adStarted) {
+          setShowManualStart(true);
+        }
+      }, 1500);
+
       return () => {
         if (durationCheckInterval) clearInterval(durationCheckInterval);
+        if (initialTimeout) clearTimeout(initialTimeout);
         if (playerInstance.current) {
           try { playerInstance.current.destroy(); } catch(e) {}
           playerInstance.current = null;
         }
       };
     }
-  }, [videoAdVisible]);
+  }, [videoAdVisible, adStarted]);
+
+  const forceStartAd = () => {
+    if (playerInstance.current) {
+      // Fluid player usually needs a direct interaction to play if autoplay failed
+      const videoElement = document.querySelector('.fluid_video_wrapper video') as HTMLVideoElement;
+      if (videoElement) {
+        videoElement.play().catch(e => console.error("Play failed:", e));
+      }
+      setShowManualStart(false);
+    }
+  };
 
   // UI countdown logic
   useEffect(() => {
@@ -322,7 +338,7 @@ export const GameView: React.FC = () => {
             {/* Locked Header */}
             <div className="p-6 border-b border-[#00f3ff]/30 flex justify-between items-center bg-[#050505] z-[1001]">
                <div className="flex items-center gap-5">
-                 <LayoutPanelLeft className="text-[#00f3ff] animate-pulse" size={30} />
+                 <Radio className="text-[#00f3ff] animate-pulse" size={30} />
                  <div className="flex flex-col">
                     <span className="text-[18px] font-black uppercase tracking-[0.6em] neon-glow-cyan">Overview</span>
                     <span className="text-[10px] text-white/30 uppercase tracking-[0.2em]">Hardware Secure Uplink</span>
@@ -337,12 +353,12 @@ export const GameView: React.FC = () => {
             {/* Overview Transfer Panel */}
             <div className="relative w-full z-[1000] bg-black/95 backdrop-blur-3xl border-b border-[#00f3ff]/20 p-12 flex items-center justify-between shadow-2xl overflow-hidden min-h-[160px]">
                {!adStarted && !isFinalizing ? (
-                 <div className="flex-1 flex flex-col items-center justify-center gap-6 py-6 animate-pulse">
+                 <div className="flex-1 flex flex-col items-center justify-center gap-6 py-6">
                     <div className="flex items-center gap-5">
                        <Loader2 className="text-[#00f3ff] animate-spin" size={32} />
-                       <span className="text-[18px] uppercase tracking-[0.5em] font-black text-[#00f3ff]">Searching for broadcast node...</span>
+                       <span className="text-[18px] uppercase tracking-[0.5em] font-black text-[#00f3ff]">Signal Acquisition...</span>
                     </div>
-                    <span className="text-[10px] text-white/20 uppercase tracking-[0.3em]">Bypassing ad-block restrictions | Handshaking 0x7F</span>
+                    <span className="text-[10px] text-white/20 uppercase tracking-[0.3em]">Handshaking with broadcast node 0x7F</span>
                  </div>
                ) : (
                  <>
@@ -396,8 +412,7 @@ export const GameView: React.FC = () => {
 
             {/* Video Player Core */}
             <div className="aspect-video bg-black relative flex flex-col items-center justify-center overflow-hidden z-0 shadow-[inset_0_0_200px_rgba(0,0,0,1)]">
-               <div className="w-full h-full relative pointer-events-none">
-                  {/* Important: muted, playsInline, autoPlay are required for most browsers to start video without interaction */}
+               <div className="w-full h-full relative">
                   <video 
                     ref={videoRef} 
                     id="video-ad-player" 
@@ -411,12 +426,27 @@ export const GameView: React.FC = () => {
                   <div className="absolute inset-0 pointer-events-none z-10 opacity-10 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[size:100%_2px,3px_100%]" />
                </div>
                
+               {showManualStart && !adStarted && (
+                 <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/80 backdrop-blur-md">
+                    <button 
+                      onClick={forceStartAd}
+                      className="group flex flex-col items-center gap-6 p-12 border-4 border-[#00f3ff] bg-black shadow-[0_0_60px_rgba(0,243,255,0.5)] animate-in zoom-in duration-300"
+                    >
+                       <PlayCircle size={80} className="text-[#00f3ff] group-hover:scale-110 transition-transform" />
+                       <div className="text-center">
+                          <span className="text-2xl font-black text-[#00f3ff] uppercase tracking-[0.5em] block mb-2">Initialize Uplink</span>
+                          <span className="text-[10px] text-white/40 uppercase tracking-[0.2em]">Connection requires manual authorization</span>
+                       </div>
+                    </button>
+                 </div>
+               )}
+
                {isFinalizing && (
                   <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 backdrop-blur-xl">
                      <div className="flex flex-col items-center gap-10 animate-in zoom-in duration-500">
                         <Loader2 className="text-[#00f3ff] animate-spin" size={120} />
                         <div className="flex flex-col items-center">
-                           <span className="text-4xl font-black uppercase tracking-[1em] neon-glow-cyan translate-x-[0.5em] mb-4">FINALIZACE</span>
+                           <span className="text-4xl font-black uppercase tracking-[1em] neon-glow-cyan translate-x-[0.5em] mb-4">Finalizing</span>
                            <span className="text-xs text-white/40 uppercase tracking-[0.5em] font-bold">Synchronizing metadata and rewards...</span>
                         </div>
                      </div>
