@@ -64,57 +64,20 @@ export const GameView: React.FC = () => {
   
   // Video Ad States
   const [videoAdVisible, setVideoAdVisible] = useState(false);
-  const [adFinished, setAdFinished] = useState(false);
   const [activeCoinId, setActiveCoinId] = useState<string | null>(null);
   const [isVideoForStart, setIsVideoForStart] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerInstance = useRef<any>(null);
+
+  // Refs for logic inside callback to avoid stale closure issues if needed
+  const isVideoForStartRef = useRef(false);
+  const activeCoinIdRef = useRef<string | null>(null);
 
   const calculateTotalDuration = (level: number) => Math.max(15, 20 + (level - 1) * 4);
 
   const addLog = (text: string, type: 'info' | 'warn' | 'success' | 'error' = 'info') => {
     setLogs(prev => [{ id: Math.random().toString(), text, type }, ...prev].slice(0, 12));
   };
-
-  const openVideoAd = (forStart: boolean = false) => {
-    setIsVideoForStart(forStart);
-    setVideoAdVisible(true);
-    setAdFinished(false);
-  };
-
-  useEffect(() => {
-    if (videoAdVisible && videoRef.current && window.fluidPlayer) {
-      playerInstance.current = window.fluidPlayer(videoRef.current, {
-        layoutControls: {
-          fillToContainer: true,
-          autoPlay: true,
-          mute: true,
-          allowDownload: false,
-          playbackRateControl: false,
-          persistentSettings: { volume: false }
-        },
-        vastOptions: {
-          adList: [
-            {
-              roll: 'preRoll',
-              vastTag: VIDEO_AD_URL
-            }
-          ],
-          adFinishedCallback: () => {
-            setAdFinished(true);
-            addLog("Autorizace úspěšná. Můžete pokračovat.", "success");
-          }
-        }
-      });
-
-      return () => {
-        if (playerInstance.current) {
-          try { playerInstance.current.destroy(); } catch(e) {}
-          playerInstance.current = null;
-        }
-      };
-    }
-  }, [videoAdVisible]);
 
   const startExpedition = () => {
     setVideoAdVisible(false);
@@ -136,6 +99,65 @@ export const GameView: React.FC = () => {
     addLog(`Navázáno spojení se Sektorem 0x${expeditionLevel.toString(16).toUpperCase()}`, 'info');
   };
 
+  const handleRewardOnAdFinish = () => {
+    if (isVideoForStartRef.current) {
+      startExpedition();
+    } else if (activeCoinIdRef.current) {
+      const coinId = activeCoinIdRef.current;
+      setCoins(prev => {
+        const coin = prev.find(c => c.id === coinId);
+        if (coin) {
+          setMikelaReserves(m => m + coin.value);
+          addLog(`Data vytěžena: +${coin.value} MK`, 'success');
+        }
+        return prev.filter(c => c.id !== coinId);
+      });
+      setVideoAdVisible(false);
+      setActiveCoinId(null);
+    } else {
+      setVideoAdVisible(false);
+    }
+  };
+
+  const openVideoAd = (forStart: boolean = false) => {
+    setIsVideoForStart(forStart);
+    isVideoForStartRef.current = forStart;
+    setVideoAdVisible(true);
+  };
+
+  useEffect(() => {
+    if (videoAdVisible && videoRef.current && window.fluidPlayer) {
+      playerInstance.current = window.fluidPlayer(videoRef.current, {
+        layoutControls: {
+          fillToContainer: true,
+          autoPlay: true,
+          mute: true,
+          allowDownload: false,
+          playbackRateControl: false,
+          persistentSettings: { volume: false }
+        },
+        vastOptions: {
+          adList: [
+            {
+              roll: 'preRoll',
+              vastTag: VIDEO_AD_URL
+            }
+          ],
+          adFinishedCallback: () => {
+            handleRewardOnAdFinish();
+          }
+        }
+      });
+
+      return () => {
+        if (playerInstance.current) {
+          try { playerInstance.current.destroy(); } catch(e) {}
+          playerInstance.current = null;
+        }
+      };
+    }
+  }, [videoAdVisible]);
+
   const [expeditionEndTime, setExpeditionEndTime] = useState<number | null>(null);
   const [currentExpeditionDuration, setCurrentExpeditionDuration] = useState<number>(0);
 
@@ -153,29 +175,8 @@ export const GameView: React.FC = () => {
 
   const handleCoinClick = (id: string) => {
     setActiveCoinId(id);
+    activeCoinIdRef.current = id;
     openVideoAd(false);
-  };
-
-  const claimReward = () => {
-    if (!adFinished) return;
-    
-    if (isVideoForStart) {
-      startExpedition();
-    } else if (activeCoinId) {
-      const coinId = activeCoinId;
-      setCoins(prev => {
-        const coin = prev.find(c => c.id === coinId);
-        if (coin) {
-          setMikelaReserves(m => m + coin.value);
-          addLog(`Dekódováno: +${coin.value} MK`, 'success');
-        }
-        return prev.filter(c => c.id !== coinId);
-      });
-      setVideoAdVisible(false);
-      setActiveCoinId(null);
-    } else {
-      setVideoAdVisible(false);
-    }
   };
 
   useEffect(() => {
@@ -227,52 +228,33 @@ export const GameView: React.FC = () => {
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
-      {/* VIDEO AD MODAL - CLEANED UP */}
+      {/* VIDEO AD MODAL - CLEAN & AUTO-CLOSING */}
       {videoAdVisible && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-3xl animate-in fade-in duration-500">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/98 backdrop-blur-3xl animate-in fade-in duration-500">
           <div className="w-full max-w-4xl bg-black border-2 border-[#00f3ff]/40 shadow-[0_0_100px_rgba(0,243,255,0.2)] relative overflow-hidden flex flex-col">
             
             {/* Minimal Header */}
-            <div className="p-4 border-b border-[#00f3ff]/20 flex justify-between items-center bg-[#050505]">
+            <div className="p-4 border-b border-[#00f3ff]/20 flex justify-between items-center bg-[#050505] z-50">
                <div className="flex items-center gap-3">
                  <Signal className="text-[#00f3ff] animate-pulse" size={16} />
                  <span className="text-[10px] font-black uppercase tracking-[0.3em]">OVĚŘOVÁNÍ_IDENTITA_UPLINK</span>
                </div>
-               {adFinished && (
-                 <button onClick={() => setVideoAdVisible(false)} className="text-[#ff00ff] hover:text-white transition-all transform hover:rotate-90">
-                   <X size={20} />
-                 </button>
-               )}
+               <button onClick={() => setVideoAdVisible(false)} className="text-[#ff00ff] hover:text-white transition-all transform hover:rotate-90">
+                 <X size={24} />
+               </button>
             </div>
 
-            {/* Player Container - No overlays during ad */}
+            {/* Player Container - Pure video, no overlays */}
             <div className="aspect-video bg-black relative flex flex-col items-center justify-center">
                <div className="w-full h-full">
                   <video ref={videoRef} id="video-ad-player">
                     <source src="" type="video/mp4" />
                   </video>
                </div>
-               
-               {/* Reward Confirmation Button - Shown ONLY after ad finishes */}
-               {adFinished && (
-                 <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md animate-in zoom-in duration-500">
-                    <div className="flex flex-col items-center gap-6 p-12 border-2 border-[#00f3ff]/30 bg-black/40">
-                       <Shield size={64} className="text-green-500 animate-pulse mb-4" />
-                       <h3 className="text-2xl font-black text-white uppercase tracking-[0.2em] mb-2 neon-glow-cyan text-center">AUTORIZACE_DOKONČENA</h3>
-                       <button 
-                        onClick={claimReward} 
-                        className="group relative px-20 py-5 bg-[#ff00ff] text-black font-black uppercase text-lg tracking-[0.4em] hover:bg-white transition-all shadow-[0_0_50px_rgba(255,0,255,0.4)]"
-                       >
-                         <span className="relative z-10">POTVRDIT</span>
-                         <div className="absolute inset-0 bg-white scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-300" />
-                       </button>
-                    </div>
-                 </div>
-               )}
             </div>
 
-            <div className="p-3 bg-[#050505] flex justify-center border-t border-white/5">
-               <span className="text-[9px] opacity-30 uppercase tracking-[0.4em]">VAST_PROTOCOL_NODE_0x71 | STATUS: {adFinished ? 'COMPLETE' : 'STREAMING'}</span>
+            <div className="p-2 bg-[#050505] flex justify-center border-t border-white/5">
+               <span className="text-[8px] opacity-20 uppercase tracking-[0.4em]">VAST_PROTOCOL_NODE_0x71 | AUTO_CLOSE_ENABLED</span>
             </div>
           </div>
         </div>
