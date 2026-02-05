@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, Sword, Package, Zap, Compass, Truck, Timer, Trophy, Shield, AlertTriangle, ChevronRight, Activity, Clock, Loader2, Coins, X, Terminal, Database, ShieldAlert as AlertIcon, PlayCircle, Lock, ExternalLink, RefreshCw, Eye } from 'lucide-react';
+import { User, Sword, Package, Zap, Compass, Truck, Timer, Trophy, Shield, AlertTriangle, ChevronRight, Activity, Clock, Loader2, Coins, X, Terminal, Database, ShieldAlert as AlertIcon, PlayCircle, Lock, ExternalLink, RefreshCw, Eye, Signal } from 'lucide-react';
 import { AdBanner } from './AdBanner';
 
 type GameTab = 'profile' | 'expeditions' | 'items';
@@ -28,6 +28,7 @@ interface GameCoin {
   value: number;
 }
 
+// HilltopAds / GroundedMine VAST/Direct Link
 const VIDEO_AD_URL = "https://groundedmine.com/d.mTFSzgdpGDNYvcZcGXUK/FeJm/9IuZZNUElDktPwTaYW3CNUz/YTwMNFD/ket-N/j_c/3qN/jPA/1cMuwy";
 const AD_WATCH_DURATION = 15; 
 
@@ -56,12 +57,12 @@ export const GameView: React.FC = () => {
   const [activeAds, setActiveAds] = useState<{id: number}[]>([]);
   const [adsDestroyed, setAdsDestroyed] = useState(0);
   
-  // Video Ad States
+  // Video Ad States (Bridge System)
   const [videoAdVisible, setVideoAdVisible] = useState(false);
   const [videoAdTimer, setVideoAdTimer] = useState(0);
   const [activeCoinId, setActiveCoinId] = useState<string | null>(null);
   const [isVideoForStart, setIsVideoForStart] = useState(false);
-  const [adTransmissionActive, setAdTransmissionActive] = useState(false);
+  const [isTransmissionActive, setIsTransmissionActive] = useState(false);
 
   const calculateTotalDuration = (level: number) => Math.max(15, 20 + (level - 1) * 4);
 
@@ -73,23 +74,25 @@ export const GameView: React.FC = () => {
     setIsVideoForStart(forStart);
     setVideoAdVisible(true);
     setVideoAdTimer(AD_WATCH_DURATION);
-    setAdTransmissionActive(false);
+    setIsTransmissionActive(false);
   };
 
-  const startAdTransmission = () => {
+  const handleStartTransmission = () => {
+    // HilltopAds Direct Links/VAST se otevírají v novém okně, aby nedocházelo k chybám v iframe
     window.open(VIDEO_AD_URL, '_blank');
-    setAdTransmissionActive(true);
+    setIsTransmissionActive(true);
+    addLog("Zahajuji HilltopAds přenos přes externí uzel...", "info");
   };
 
   useEffect(() => {
     let timer: number;
-    if (videoAdVisible && adTransmissionActive && videoAdTimer > 0) {
+    if (videoAdVisible && isTransmissionActive && videoAdTimer > 0) {
       timer = window.setInterval(() => {
         setVideoAdTimer(prev => prev - 1);
       }, 1000);
     }
     return () => clearInterval(timer);
-  }, [videoAdVisible, adTransmissionActive, videoAdTimer]);
+  }, [videoAdVisible, isTransmissionActive, videoAdTimer]);
 
   const startExpedition = () => {
     setVideoAdVisible(false);
@@ -196,77 +199,79 @@ export const GameView: React.FC = () => {
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
-      {/* GLOBAL VIDEO AD BRIDGE MODAL */}
+      {/* IMPROVED VIDEO AD BRIDGE MODAL (No more iframe errors) */}
       {videoAdVisible && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/98 backdrop-blur-3xl animate-in fade-in duration-500">
-          <div className="w-full max-w-4xl bg-black border-2 border-[#00f3ff]/40 shadow-[0_0_100px_rgba(0,243,255,0.2)] relative overflow-hidden flex flex-col">
+          <div className="w-full max-w-3xl bg-black border-2 border-[#00f3ff]/30 shadow-[0_0_150px_rgba(0,243,255,0.2)] relative overflow-hidden flex flex-col">
             
-            <div className="p-6 border-b border-[#00f3ff]/20 flex justify-between items-center bg-[#050505]">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-[#00f3ff]/20 flex justify-between items-center bg-[#050505]">
                <div className="flex items-center gap-4">
-                 <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse shadow-[0_0_15px_#ef4444]" />
-                 <span className="text-base font-black uppercase tracking-[0.3em] italic">AUTORIZACE_PŘENOSU_v9.6</span>
+                 <Signal className="text-red-600 animate-pulse" size={20} />
+                 <span className="text-sm font-black uppercase tracking-[0.25em]">{isVideoForStart ? 'PŘED-START_AUTORIZACE' : 'DATAVÝ_UPLINK_VERIFIKACE'}</span>
                </div>
-               {videoAdTimer <= 0 && adTransmissionActive && (
-                 <button onClick={() => setVideoAdVisible(false)} className="text-white/40 hover:text-white transition-all transform hover:rotate-90">
-                   <X size={28} />
+               {videoAdTimer <= 0 && isTransmissionActive && (
+                 <button onClick={() => setVideoAdVisible(false)} className="text-[#ff00ff] hover:text-white transition-all transform hover:rotate-90">
+                   <X size={24} />
                  </button>
                )}
             </div>
 
-            <div className="aspect-video bg-[#010101] relative flex flex-col items-center justify-center p-12 overflow-hidden">
-               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,243,255,0.06)_0%,transparent_70%)] pointer-events-none" />
-               
-               {!adTransmissionActive ? (
-                 <div className="text-center space-y-10 z-10 animate-in slide-in-from-bottom-6 duration-500">
+            {/* Video Content Replacement (Bridge Interface) */}
+            <div className="aspect-video bg-[#010101] relative flex flex-col items-center justify-center p-12 text-center overflow-hidden">
+               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,243,255,0.05)_0%,transparent_70%)] pointer-events-none" />
+
+               {!isTransmissionActive ? (
+                 <div className="space-y-12 z-10 animate-in slide-in-from-bottom-8 duration-700">
                     <div className="relative inline-block">
-                       <div className="absolute inset-0 bg-[#00f3ff] blur-3xl opacity-20 animate-pulse" />
-                       <Shield size={80} className="text-[#00f3ff] relative animate-pulse" />
+                       <div className="absolute inset-0 bg-[#00f3ff] blur-[100px] opacity-20 animate-pulse" />
+                       <Lock size={100} className="text-[#00f3ff] relative opacity-50" />
                     </div>
                     <div className="space-y-4">
-                       <h3 className="text-2xl font-black uppercase tracking-[0.2em] text-white">ZABEZPEČENÝ_UPLINK_PŘIPRAVEN</h3>
-                       <p className="text-xs text-[#00f3ff]/60 max-w-sm mx-auto leading-relaxed tracking-widest uppercase">
-                          Klikněte na tlačítko pro spuštění HilltopAds protokolu v novém okně. Ponechte okno otevřené pro validaci.
+                       <h3 className="text-2xl font-black uppercase tracking-[0.2em] text-white italic">SYSTÉM_VYŽADUJE_UPLINK</h3>
+                       <p className="text-[10px] text-[#00f3ff]/60 max-w-sm mx-auto leading-relaxed uppercase tracking-[0.2em]">
+                          Pro pokračování v expedici je nutné navázat zabezpečené spojení přes reklamní bránu HilltopAds. Klikněte pro otevření v nové kartě.
                        </p>
                     </div>
                     <button 
-                      onClick={startAdTransmission}
-                      className="px-16 py-6 bg-[#00f3ff] text-black font-black uppercase text-lg tracking-[0.4em] hover:bg-white transition-all shadow-[0_0_40px_rgba(0,243,255,0.4)] flex items-center gap-4 mx-auto"
+                      onClick={handleStartTransmission}
+                      className="group relative px-20 py-6 border-2 border-[#ff00ff] overflow-hidden transition-all hover:bg-[#ff00ff] hover:text-black shadow-[0_0_40px_rgba(255,0,255,0.3)]"
                     >
-                      <PlayCircle size={24} /> SPUSTIT_PROTOKOL
+                      <span className="relative z-10 text-xl font-black uppercase tracking-[0.4em]">OTEVŘÍT_AD_CHANNEL</span>
                     </button>
                  </div>
                ) : (
-                 <div className="text-center space-y-12 z-10">
+                 <div className="space-y-12 z-10">
                     {videoAdTimer > 0 ? (
-                      <div className="flex flex-col items-center gap-8 animate-in zoom-in duration-500">
+                      <div className="flex flex-col items-center gap-10 animate-in zoom-in duration-500">
                          <div className="relative">
-                            <Loader2 size={100} className="text-[#00f3ff] animate-spin opacity-20" />
+                            <div className="w-32 h-32 rounded-full border-4 border-dashed border-[#00f3ff] animate-spin-slow" />
                             <div className="absolute inset-0 flex items-center justify-center">
-                               <span className="text-4xl font-black text-[#00f3ff] tabular-nums">{videoAdTimer}S</span>
+                               <span className="text-5xl font-black text-[#00f3ff] tabular-nums">{videoAdTimer}S</span>
                             </div>
                          </div>
-                         <div className="space-y-2">
-                            <p className="text-sm font-black uppercase tracking-[0.5em] text-[#00f3ff]">Synchronizace_v_procesu...</p>
-                            <p className="text-[10px] text-white/30 uppercase tracking-[0.2em]">Ponechte reklamní kanál aktivní na pozadí</p>
+                         <div className="space-y-3">
+                            <p className="text-base font-black uppercase tracking-[0.5em] text-[#00f3ff] animate-pulse">SYNCHRONIZACE_DAT...</p>
+                            <p className="text-[9px] text-white/30 uppercase tracking-[0.2em]">Ponechte otevřenou reklamní kartu na pozadí</p>
                          </div>
-                         <div className="w-80 h-2 bg-white/5 rounded-full overflow-hidden border border-white/10">
-                            <div className="h-full bg-gradient-to-r from-[#00f3ff] to-[#ff00ff] transition-all duration-1000 linear" style={{ width: `${(1 - videoAdTimer/AD_WATCH_DURATION) * 100}%` }} />
+                         <div className="w-80 h-2 bg-white/5 relative rounded-full overflow-hidden border border-white/10 p-0.5">
+                            <div className="h-full bg-gradient-to-r from-[#00f3ff] via-[#ff00ff] to-[#00f3ff] transition-all duration-1000 linear" style={{ width: `${(1 - videoAdTimer/AD_WATCH_DURATION) * 100}%` }} />
                          </div>
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center gap-10 animate-in zoom-in slide-in-from-bottom-8 duration-700">
-                         <div className="flex items-center gap-4 bg-green-500/20 border-2 border-green-500/50 px-10 py-4 rounded-lg shadow-[0_0_30px_rgba(34,197,94,0.3)]">
-                            <Shield size={32} className="text-green-400" />
-                            <div className="text-left">
-                               <p className="text-xs font-black uppercase tracking-[0.3em] text-green-400">PŘENOS_AUTORIZOVÁN</p>
-                               <p className="text-[8px] text-green-400/60 uppercase">Uplink: Verified | Latency: 12ms</p>
+                      <div className="flex flex-col items-center gap-12 animate-in zoom-in slide-in-from-bottom-8 duration-700">
+                         <div className="bg-green-500/10 border-2 border-green-500/50 p-8 rounded-lg shadow-[0_0_50px_rgba(34,197,94,0.3)] space-y-4">
+                            <div className="flex items-center justify-center gap-4">
+                               <Shield size={40} className="text-green-400" />
+                               <h4 className="text-xl font-black uppercase tracking-[0.3em] text-green-400">UPLINK_STABILNÍ</h4>
                             </div>
+                            <p className="text-[10px] text-green-400/60 uppercase tracking-[0.1em]">Verifikace HilltopAds úspěšně dokončena</p>
                          </div>
                          <button 
                           onClick={claimVideoReward} 
-                          className="group relative px-28 py-8 bg-[#ff00ff] text-black font-black uppercase text-xl tracking-[0.6em] hover:bg-white transition-all shadow-[0_0_60px_rgba(255,0,255,0.6)] transform hover:scale-105 active:scale-95"
+                          className="group relative px-24 py-8 bg-[#ff00ff] text-black font-black uppercase text-lg tracking-[0.6em] hover:bg-white transition-all shadow-[0_0_80px_rgba(255,0,255,0.5)] transform hover:scale-110 active:scale-95"
                          >
-                           <span className="relative z-10 font-black">POTVRDIT_PŘÍJEM</span>
+                           <span className="relative z-10 font-black">VSTOUPIT_DO_MATRIXU</span>
                            <div className="absolute inset-0 bg-white scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-500" />
                          </button>
                       </div>
@@ -274,18 +279,18 @@ export const GameView: React.FC = () => {
                     
                     <button 
                       onClick={() => window.open(VIDEO_AD_URL, '_blank')}
-                      className="text-[9px] text-white/20 uppercase tracking-widest hover:text-[#00f3ff] flex items-center gap-2 mx-auto transition-colors"
+                      className="text-[9px] text-white/20 uppercase tracking-widest hover:text-[#00f3ff] transition-colors flex items-center gap-2 mx-auto mt-10"
                     >
-                      <ExternalLink size={12} /> Re-open_Ad_Window
+                      <RefreshCw size={12} /> ZNOVU_OTEVŘÍT_REKLAMU
                     </button>
                  </div>
                )}
             </div>
 
-            <div className="p-4 bg-[#050505] flex justify-between items-center border-t border-white/5 px-10">
-               <span className="text-[9px] opacity-20 uppercase tracking-[0.5em]">HilltopAds_Direct_Uplink_Node_v9.6 | STATUS: ENCRYPTED</span>
-               <div className="flex gap-6">
-                  <span className="text-[9px] text-[#00f3ff]/30 uppercase tracking-widest">Region: EU_CENTRAL_1</span>
+            <div className="p-4 bg-black flex justify-between items-center border-t border-white/5 px-10">
+               <span className="text-[8px] opacity-20 uppercase tracking-[0.5em]">HilltopAds_Direct_Transmission_Node_v9.6 | STATUS: DECRYPTING</span>
+               <div className="flex gap-4">
+                  <span className="text-[8px] text-[#00f3ff]/20 uppercase">SECURE_TUNNEL: ACTIVE</span>
                </div>
             </div>
           </div>
@@ -295,8 +300,8 @@ export const GameView: React.FC = () => {
       {/* Sidebar navigation */}
       <aside className="w-20 md:w-64 border-r border-white/5 bg-black/60 flex flex-col py-8 z-20 backdrop-blur-md">
         <div className="mb-14 flex flex-col items-center gap-3">
-          <Database className="text-[#00f3ff] animate-pulse" size={32} />
-          <span className="hidden md:block text-[10px] text-[#00f3ff]/40 uppercase font-black tracking-[0.6em]">MATRIX_CONTROL</span>
+          <Database className="text-[#00f3ff] animate-pulse" size={28} />
+          <span className="hidden md:block text-[9px] text-[#00f3ff]/40 uppercase font-black tracking-[0.6em]">MATRIX_CONTROL</span>
         </div>
         <nav className="flex-1 space-y-3 px-3">
           {[
@@ -309,8 +314,8 @@ export const GameView: React.FC = () => {
               onClick={() => { setActiveTab(item.id); setActiveExpedition(false); }}
               className={`w-full flex items-center justify-center md:justify-start gap-4 p-5 transition-all duration-300 rounded-xl ${activeTab === item.id ? 'bg-[#00f3ff]/15 text-[#00f3ff] border-r-4 border-[#00f3ff] shadow-[inset_0_0_20px_rgba(0,243,255,0.15)]' : 'text-white/20 hover:text-white hover:bg-white/5'}`}
             >
-              <item.icon size={24} />
-              <span className="hidden md:block text-[11px] font-black uppercase tracking-[0.3em]">{item.label}</span>
+              <item.icon size={22} />
+              <span className="hidden md:block text-[11px] font-black uppercase tracking-[0.2em]">{item.label}</span>
             </button>
           ))}
         </nav>
