@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useRef } from 'react';
-import { Zap, Loader2, Cpu, ExternalLink } from 'lucide-react';
+import { Zap, Loader2, ShieldAlert } from 'lucide-react';
 
 interface AdBannerProps {
   onDestroyed?: () => void;
@@ -9,132 +9,139 @@ interface AdBannerProps {
 
 export const AdBanner: React.FC<AdBannerProps> = ({ onDestroyed, playerAtk = 1 }) => {
   const [health, setHealth] = useState(100);
-  const [isHurt, setIsHurt] = useState(false);
   const [isDead, setIsDead] = useState(false);
-  const [status, setStatus] = useState<'loading' | 'active' | 'blocked'>('loading');
-  
+  const [isHurt, setIsHurt] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const adContainerRef = useRef<HTMLDivElement>(null);
+
+  // Funkce pro zásah (kliknutí na banner)
   const handleHit = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (isDead) return;
     
-    const damage = 20 + (playerAtk * 10);
-    setHealth(prev => Math.max(0, prev - damage));
-    setIsHurt(true);
-    setTimeout(() => setIsHurt(false), 80);
+    const damage = 35 + (playerAtk * 5);
+    setHealth(prev => {
+      const newHealth = Math.max(0, prev - damage);
+      if (newHealth <= 0 && !isDead) {
+        setIsDead(true);
+        setTimeout(() => onDestroyed?.(), 600);
+      }
+      return newHealth;
+    });
 
-    if (health <= damage) {
-      setIsDead(true);
-      setTimeout(() => onDestroyed?.(), 400);
-    }
+    setIsHurt(true);
+    setTimeout(() => setIsHurt(false), 100);
   };
 
+  // Injekce nového skriptu přímo do DOM
   useEffect(() => {
-    // Timeout pro detekci blokování (pokud se reklama nenačte)
-    const timer = setTimeout(() => {
-      if (status === 'loading') setStatus('blocked');
-    }, 5000);
+    if (isDead || !adContainerRef.current) return;
 
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data === 'ad-ready') {
-        setStatus('active');
-        clearTimeout(timer);
-      }
-    };
+    // Vyčištění kontejneru před novou injekcí
+    const container = adContainerRef.current;
+    container.innerHTML = '';
 
-    window.addEventListener('message', handleMessage);
+    // Definice atOptions s NOVÝM KLÍČEM
+    const optionsScript = document.createElement('script');
+    optionsScript.type = 'text/javascript';
+    optionsScript.text = `
+      atOptions = {
+        'key' : '9ffa2bb84a4524c7addb7491067cb475',
+        'format' : 'iframe',
+        'height' : 50,
+        'width' : 320,
+        'params' : {}
+      };
+    `;
+
+    // Nový invoke skript s NOVOU URL
+    const invokeScript = document.createElement('script');
+    invokeScript.type = 'text/javascript';
+    invokeScript.src = 'https://ignateignatepredominanteatable.com/9ffa2bb84a4524c7addb7491067cb475/invoke.js';
+    
+    // Sledování načtení
+    invokeScript.onload = () => setIsLoading(false);
+    
+    container.appendChild(optionsScript);
+    container.appendChild(invokeScript);
+
+    // Timeout pro zrušení loading stavu
+    const timeout = setTimeout(() => setIsLoading(false), 3000);
+
     return () => {
-      window.removeEventListener('message', handleMessage);
-      clearTimeout(timer);
+      clearTimeout(timeout);
+      container.innerHTML = '';
     };
-  }, [status]);
+  }, [isDead]);
 
   if (isDead) {
     return (
-      <div className="w-[320px] h-[50px] flex items-center justify-center animate-explode">
-        <Zap className="text-[#ff00ff] animate-ping" size={32} />
+      <div className="w-[320px] h-[50px] flex items-center justify-center animate-explode relative bg-[#ff00ff]/10">
+        <Zap className="text-[#ff00ff] neon-glow-pink animate-ping" size={32} />
+        <div className="absolute inset-0 border border-[#ff00ff] opacity-20" />
       </div>
     );
   }
 
-  const adHtml = `
-    <html>
-      <body style="margin:0;padding:0;overflow:hidden;background:black;">
-        <div id="container" style="width:320px;height:50px;">
-          <script type="text/javascript">
-            atOptions = { 'key' : 'a85ff9ddbe88616be678af1325d6582c', 'format' : 'iframe', 'height' : 50, 'width' : 320, 'params' : {} };
-          </script>
-          <script type="text/javascript" src="https://www.highperformanceformat.com/a85ff9ddbe88616be678af1325d6582c/invoke.js" onload="window.parent.postMessage('ad-ready', '*')"></script>
-        </div>
-      </body>
-    </html>
-  `;
-
   return (
     <div 
-      onClick={handleHit}
-      className={`relative w-[320px] h-[50px] cursor-crosshair overflow-hidden border border-[#00f3ff]/40 bg-black transition-all ${isHurt ? 'animate-shake' : 'hover:scale-[1.01]'}`}
+      className={`relative w-[320px] h-[70px] flex flex-col items-center group select-none transition-transform ${isHurt ? 'scale-95' : ''}`}
     >
-      {/* HP BAR OVERLAY - Tenká linka nahoře */}
-      <div className="absolute top-0 left-0 w-full h-[2px] bg-black/50 z-50">
+      {/* HP Bar a Info */}
+      <div className="w-full flex justify-between items-end mb-1 px-1">
+        <span className="text-[8px] text-[#00f3ff] font-black uppercase tracking-[0.2em] opacity-70">
+          Target: Static_Banner_v3
+        </span>
+        <span className="text-[10px] text-[#00f3ff] font-black italic">
+          INTEGRITA: {Math.ceil(health)}%
+        </span>
+      </div>
+      
+      <div className="w-full h-1.5 bg-black border border-white/10 mb-2 overflow-hidden shadow-[0_0_10px_rgba(0,0,0,0.5)]">
         <div 
-          className="h-full bg-gradient-to-r from-red-500 to-[#00f3ff] transition-all duration-300 shadow-[0_0_5px_#00f3ff]" 
-          style={{ width: `${health}%` }}
+          className="h-full bg-gradient-to-r from-red-600 via-[#00f3ff] to-red-600 transition-all duration-300 shadow-[0_0_8px_#00f3ff]" 
+          style={{ width: `${health}%`, backgroundSize: '200% 100%' }}
         />
       </div>
 
-      {/* IFRAME LAYER */}
-      <iframe
-        srcDoc={adHtml}
-        title="Ad"
-        width="320"
-        height="50"
-        scrolling="no"
-        frameBorder="0"
-        className={`pointer-events-none transition-opacity duration-500 ${status === 'active' ? 'opacity-100' : 'opacity-0'}`}
-      />
-
-      {/* FALLBACK LAYER (Pokud je AdBlock aktivní) */}
-      {(status === 'loading' || status === 'blocked') && (
-        <div className="absolute inset-0 flex items-center justify-between px-4 bg-gradient-to-r from-[#00f3ff]/10 to-black z-10">
-          <div className="flex flex-col leading-none">
-            <span className="text-[10px] font-black text-[#00f3ff] italic uppercase tracking-tighter">
-              {status === 'loading' ? 'SYNCHRONIZING...' : 'AD_BLOCK_DETECTED'}
-            </span>
-            <span className="text-[7px] text-white/40 uppercase font-bold mt-1">
-              {status === 'loading' ? 'Establishing link' : 'Neural_Link_Replacement'}
-            </span>
+      {/* Kontejner pro reklamu */}
+      <div className="relative w-[320px] h-[50px] bg-black/40 border border-[#00f3ff]/20 overflow-hidden group-hover:border-[#00f3ff]/50 transition-colors">
+        
+        {/* Loading Overlay */}
+        {isLoading && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/80 gap-3">
+            <Loader2 className="text-[#00f3ff] animate-spin" size={16} />
+            <span className="text-[9px] text-[#00f3ff] font-black uppercase tracking-widest">Synchronizace...</span>
           </div>
-          {status === 'loading' ? (
-            <Loader2 className="text-[#00f3ff] animate-spin" size={14} />
-          ) : (
-            <div className="flex items-center gap-2">
-               <Cpu className="text-[#ff00ff] animate-pulse" size={14} />
-               <div className="bg-[#00f3ff] text-black px-1.5 py-0.5 text-[7px] font-black flex items-center gap-1">
-                 <ExternalLink size={8} /> CLICK_TO_PURGE
-               </div>
-            </div>
-          )}
-        </div>
-      )}
+        )}
 
-      {/* CLICK DETECTOR - Musí být nahoře pro detekci kliknutí */}
-      <div className="absolute inset-0 z-40 bg-transparent" />
+        {/* Ad Injection Point */}
+        <div 
+          ref={adContainerRef}
+          className="w-[320px] h-[50px] z-10"
+        />
+
+        {/* Click Layer */}
+        <div 
+          onClick={handleHit}
+          className="absolute inset-0 z-30 cursor-crosshair bg-transparent active:bg-white/5"
+          title="Klikněte pro likvidaci banneru"
+        />
+        
+        {/* AdBlock Fallback */}
+        <div className="absolute inset-0 -z-10 flex items-center justify-center opacity-30">
+           <ShieldAlert className="text-red-500" size={24} />
+           <span className="text-[8px] ml-2 font-black uppercase">Chráněno firewallem</span>
+        </div>
+      </div>
 
       <style>{`
-        @keyframes shake {
-          0%, 100% { transform: translate(0, 0); }
-          20% { transform: translate(-2px, 1px); }
-          40% { transform: translate(2px, -1px); }
-          60% { transform: translate(-2px, -1px); }
-          80% { transform: translate(2px, 1px); }
-        }
-        .animate-shake { animation: shake 0.1s linear infinite; }
         @keyframes explode {
           0% { transform: scale(1); opacity: 1; filter: brightness(2); }
-          100% { transform: scale(2); opacity: 0; filter: blur(10px); }
+          100% { transform: scale(1.8); opacity: 0; filter: blur(15px); }
         }
-        .animate-explode { animation: explode 0.4s ease-out forwards; }
+        .animate-explode { animation: explode 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
       `}</style>
     </div>
   );
