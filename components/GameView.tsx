@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Sword, Package, Zap, Compass, Truck, Timer, Trophy, Shield, AlertTriangle, ChevronRight, Activity, Clock, Loader2, Coins, X, Terminal, Database, ShieldAlert as AlertIcon, PlayCircle, Lock, ExternalLink, RefreshCw, Eye, Signal, Volume2, Play } from 'lucide-react';
+import { User, Sword, Package, Zap, Compass, Truck, Timer, Trophy, Shield, AlertTriangle, ChevronRight, Activity, Clock, Loader2, Coins, X, Terminal, Database, ShieldAlert as AlertIcon, PlayCircle, Lock, ExternalLink, RefreshCw, Eye, Signal, Volume2 } from 'lucide-react';
 import { AdBanner } from './AdBanner';
 
 type GameTab = 'profile' | 'expeditions' | 'items';
@@ -35,7 +35,7 @@ declare global {
 
 // Stable HilltopAds VAST Tag URL
 const VIDEO_AD_URL = "https://groundedmine.com/d.mGFPz/doGqNEv-ZbGTUR/AeHmI9/uzZoUxlUkMPwToYV3BN/zSY/wDNsD/k/tZNvjAc/3RNijgAA1vMQwg";
-const AD_WATCH_DURATION = 60; 
+const AD_WATCH_DURATION = 15; 
 
 export const GameView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<GameTab>('profile');
@@ -71,7 +71,7 @@ export const GameView: React.FC = () => {
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerInstance = useRef<any>(null);
-  const playbackDetectedRef = useRef(false);
+  const adStartedRef = useRef(false);
 
   const calculateTotalDuration = (level: number) => Math.max(15, 20 + (level - 1) * 4);
 
@@ -79,59 +79,49 @@ export const GameView: React.FC = () => {
     setLogs(prev => [{ id: Math.random().toString(), text, type }, ...prev].slice(0, 12));
   };
 
-  const initPlayer = () => {
-    if (!videoRef.current || !window.fluidPlayer) return;
-    
-    if (playerInstance.current) {
-      try { playerInstance.current.destroy(); } catch(e) {}
-    }
-
-    setIsAdPlaying(false);
-    playbackDetectedRef.current = false;
-
-    playerInstance.current = window.fluidPlayer(videoRef.current, {
-      layoutControls: {
-        fillToContainer: true,
-        autoPlay: true,
-        mute: true,
-        allowDownload: false,
-        playbackRateControl: false,
-        persistentSettings: { volume: false }
-      },
-      vastOptions: {
-        allowVPAID: true,
-        adList: [
-          {
-            roll: 'preRoll',
-            vastTag: VIDEO_AD_URL
-          }
-        ],
-        adStartedCallback: () => {
-          if (!playbackDetectedRef.current) {
-            playbackDetectedRef.current = true;
-            setIsAdPlaying(true);
-            addLog("Uplink Established. Verifying data packets...", "info");
-          }
-        },
-        adFinishedCallback: () => {
-          addLog("Ad Segment Transmission Complete.", "success");
-        }
-      }
-    });
-  };
-
   const openVideoAd = (forStart: boolean = false) => {
     setIsVideoForStart(forStart);
     setVideoAdVisible(true);
     setVideoAdTimer(AD_WATCH_DURATION);
     setIsAdPlaying(false);
-    playbackDetectedRef.current = false;
+    adStartedRef.current = false;
   };
 
   useEffect(() => {
-    if (videoAdVisible) {
-      setTimeout(initPlayer, 100);
+    if (videoAdVisible && videoRef.current && window.fluidPlayer) {
+      playerInstance.current = window.fluidPlayer(videoRef.current, {
+        layoutControls: {
+          fillToContainer: true,
+          autoPlay: true,
+          mute: true,
+          allowDownload: false,
+          playbackRateControl: false,
+          persistentSettings: { volume: false }
+        },
+        vastOptions: {
+          allowVPAID: true,
+          adList: [
+            {
+              roll: 'preRoll',
+              vastTag: VIDEO_AD_URL
+            }
+          ],
+          adFinishedCallback: () => {
+            addLog("Uplink Transmission Complete.", "success");
+          }
+        }
+      });
+
+      const checkPlayback = setInterval(() => {
+        if (playerInstance.current && !adStartedRef.current) {
+          adStartedRef.current = true;
+          setIsAdPlaying(true);
+          addLog("Uplink Established. Verifying data packets...", "info");
+        }
+      }, 1000);
+
       return () => {
+        clearInterval(checkPlayback);
         if (playerInstance.current) {
           try { playerInstance.current.destroy(); } catch(e) {}
           playerInstance.current = null;
@@ -257,16 +247,15 @@ export const GameView: React.FC = () => {
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
-      {/* STABLE VIDEO AD MODAL */}
+      {/* VIDEO AD MODAL */}
       {videoAdVisible && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/98 backdrop-blur-3xl animate-in fade-in duration-500">
           <div className="w-full max-w-4xl bg-black border-2 border-[#00f3ff]/40 shadow-[0_0_150px_rgba(0,243,255,0.2)] relative overflow-hidden flex flex-col">
             
-            {/* Header */}
             <div className="p-5 border-b border-[#00f3ff]/20 flex justify-between items-center bg-[#050505]">
                <div className="flex items-center gap-4">
                  <Signal className="text-red-600 animate-pulse" size={20} />
-                 <span className="text-sm font-black uppercase tracking-[0.25em]">{isVideoForStart ? 'VERIFIKACE STARTU' : 'DATOVÝ PŘENOS'}</span>
+                 <span className="text-sm font-black uppercase tracking-[0.25em]">{isVideoForStart ? 'PŘED-START_VERIFIKACE' : 'DATAVÝ_PŘENOS'}</span>
                </div>
                {videoAdTimer <= 0 && (
                  <button onClick={() => setVideoAdVisible(false)} className="text-[#ff00ff] hover:text-white transition-all transform hover:rotate-90">
@@ -275,17 +264,15 @@ export const GameView: React.FC = () => {
                )}
             </div>
 
-            {/* Video Player Area */}
             <div className="aspect-video bg-[#010101] relative flex flex-col items-center justify-center overflow-hidden">
                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,243,255,0.05)_0%,transparent_70%)] pointer-events-none" />
 
                <div className="w-full h-full z-10">
-                  <video ref={videoRef} id="video-ad-player" playsInline>
+                  <video ref={videoRef} id="video-ad-player">
                     <source src="" type="video/mp4" />
                   </video>
                </div>
                
-               {/* Playback Wait/Overlay */}
                <div className="absolute bottom-0 left-0 w-full p-10 bg-gradient-to-t from-black via-black/90 to-transparent flex flex-col items-center gap-6 z-30 pointer-events-none">
                   {videoAdTimer > 0 ? (
                     <div className="flex flex-col items-center gap-4 bg-black/80 px-12 py-6 border border-[#00f3ff]/20 backdrop-blur-md shadow-2xl pointer-events-auto">
@@ -323,7 +310,7 @@ export const GameView: React.FC = () => {
             </div>
 
             <div className="p-4 bg-[#050505] flex justify-between items-center border-t border-white/5 px-8">
-               <span className="text-[8px] opacity-20 uppercase tracking-[0.4em]">Protocol: HilltopAds_VAST_v3 | Stable_Watch</span>
+               <span className="text-[8px] opacity-20 uppercase tracking-[0.4em]">Protocol: HilltopAds_VAST_v3 | Stable_Uplink</span>
                <div className="flex gap-4">
                   <button onClick={() => window.open(VIDEO_AD_URL, '_blank')} className="text-[8px] uppercase tracking-widest text-[#00f3ff]/40 hover:text-white flex items-center gap-1">
                     <ExternalLink size={10} /> Manuální Odkaz
@@ -334,7 +321,7 @@ export const GameView: React.FC = () => {
         </div>
       )}
 
-      {/* Sidebar navigation */}
+      {/* Postranní navigace */}
       <aside className="w-20 md:w-64 border-r border-white/5 bg-black/60 flex flex-col py-8 z-20 backdrop-blur-md">
         <div className="mb-14 flex flex-col items-center gap-3">
           <Database className="text-[#00f3ff] animate-pulse" size={28} />
@@ -440,7 +427,7 @@ export const GameView: React.FC = () => {
                         <AlertTriangle size={140} className="text-red-500 mx-auto mb-12 animate-pulse" />
                       )}
                       <h2 className={`text-8xl font-black text-white italic uppercase tracking-tighter mb-8 ${phase === 'COMPLETED' ? 'neon-glow-cyan' : ''}`}>
-                        {phase === 'COMPLETED' ? 'SEKTOR VYČIŠTĚN' : 'MISE SELHALA'}
+                        {phase === 'COMPLETED' ? 'SEKTOR VYČIŠTĚN' : 'EXPEDICE SELHALA'}
                       </h2>
                       <p className="text-sm text-[#00f3ff] uppercase font-black mb-16 tracking-[0.5em] opacity-80 animate-pulse">
                         {phase === 'COMPLETED' ? 'Data Secured | Connection Stable' : 'Link Lost | Data Corrupted'}
@@ -454,7 +441,7 @@ export const GameView: React.FC = () => {
                 )}
               </div>
 
-              {/* Sidebar */}
+              {/* Terminal sidebar */}
               <div className="w-80 border-l border-white/5 bg-[#020202] flex flex-col shadow-[-30px_0_60px_rgba(0,0,0,0.8)] z-10">
                 <div className="p-8 border-b border-white/10 flex items-center justify-between bg-black/60">
                   <div className="flex items-center gap-4">
@@ -476,7 +463,7 @@ export const GameView: React.FC = () => {
                 <div className="p-10 bg-black/95 border-t border-white/10 space-y-8">
                    <div className="space-y-4">
                       <div className="flex justify-between text-[11px] text-[#00f3ff] font-black tracking-[0.4em] uppercase">
-                        <span>EXTRAKCE</span>
+                        <span>EXTRAKCE_DAT</span>
                         <span className="neon-glow-cyan font-mono">{progress}%</span>
                       </div>
                       <div className="h-3 bg-white/5 relative rounded-full overflow-hidden p-1 border border-white/10">
@@ -501,7 +488,7 @@ export const GameView: React.FC = () => {
                   </div>
                   <div className="space-y-10 relative z-10 flex-1 text-center lg:text-left">
                     <div className="space-y-3">
-                       <span className="text-[12px] text-[#00f3ff] font-black uppercase tracking-[0.6em] opacity-40 block animate-pulse">Admin Access</span>
+                       <span className="text-[12px] text-[#00f3ff] font-black uppercase tracking-[0.6em] opacity-40 block animate-pulse">Network Admin Access</span>
                        <h2 className="text-8xl font-black text-white italic uppercase tracking-tighter neon-glow-cyan leading-none">ADMIN_77</h2>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
@@ -509,6 +496,19 @@ export const GameView: React.FC = () => {
                       <div className="flex flex-col border-l-6 border-[#ff00ff] pl-10 py-3 bg-white/[0.03] backdrop-blur-md hover:bg-[#ff00ff]/5 transition-colors group/stat"><span className="text-[11px] text-[#ff00ff] font-black uppercase tracking-[0.4em] mb-3 opacity-60">REPUTACE</span><span className="text-5xl font-black text-white tracking-tighter tabular-nums group-hover/stat:neon-glow-pink transition-all">{reputation.toLocaleString()} XP</span></div>
                     </div>
                   </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+                   {[
+                     { label: 'Tier Systému', val: `0x${expeditionLevel.toString(16).toUpperCase()}`, color: '#00f3ff', icon: Eye },
+                     { label: 'Anomálie vyčištěny', val: adsDestroyed, color: '#ff00ff', icon: Zap },
+                     { label: 'Integrita Linku', val: 'STABLE', color: '#10b981', icon: Shield }
+                   ].map((stat, i) => (
+                    <div key={i} className="p-12 border-2 border-white/5 bg-white/[0.01] hover:bg-white/[0.05] transition-all hover:-translate-y-3 duration-500 group relative overflow-hidden">
+                       <span className="text-[12px] text-white/40 uppercase font-black tracking-[0.4em] block mb-6">{stat.label}</span>
+                       <p className="text-6xl font-black italic tracking-tighter group-hover:scale-110 transition-transform origin-left drop-shadow-2xl" style={{ color: stat.color }}>{stat.val}</p>
+                    </div>
+                   ))}
                 </div>
               </div>
             )}
@@ -552,7 +552,8 @@ export const GameView: React.FC = () => {
                             <u.icon className={canAfford ? 'text-[#ff00ff] group-hover:scale-125 transition-transform duration-500' : 'text-white/10'} size={56} />
                           </div>
                           <div className="text-right">
-                             <span className="text-[12px] text-white/40 font-black uppercase tracking-[0.4em] block mb-3">Upgrade v{u.level}</span>
+                             <span className="text-[12px] text-white/40 font-black uppercase tracking-[0.4em] block mb-3">Upgrade Tier</span>
+                             <span className="text-6xl font-black text-[#ff00ff] italic group-hover:neon-glow-pink transition-all duration-500">v{u.level}</span>
                           </div>
                         </div>
                         <h4 className="text-4xl font-black text-white uppercase mb-6 tracking-tight group-hover:text-[#ff00ff] transition-colors duration-500">{u.name}</h4>
