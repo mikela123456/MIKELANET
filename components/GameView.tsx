@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Sword, Package, Zap, Compass, Truck, Timer, Trophy, Shield, AlertTriangle, ChevronRight, Activity, Clock, Loader2, Coins, X, Terminal, Database, ShieldAlert as AlertIcon, PlayCircle, Lock, ExternalLink, RefreshCw, Eye, Signal, Volume2, HardDrive, Cpu } from 'lucide-react';
+import { User, Sword, Package, Zap, Compass, Truck, Timer, Trophy, Shield, AlertTriangle, ChevronRight, Activity, Clock, Loader2, Coins, X, Terminal, Database, ShieldAlert as AlertIcon, PlayCircle, Lock, ExternalLink, RefreshCw, Eye, Signal, Volume2, HardDrive, Cpu, LayoutPanelLeft, Share2 } from 'lucide-react';
 import { AdBanner } from './AdBanner';
 
 type GameTab = 'profile' | 'expeditions' | 'items';
@@ -66,12 +66,13 @@ export const GameView: React.FC = () => {
   const [activeCoinId, setActiveCoinId] = useState<string | null>(null);
   const [isVideoForStart, setIsVideoForStart] = useState(false);
   const [adTimeRemaining, setAdTimeRemaining] = useState(60);
+  const [maxAdDuration, setMaxAdDuration] = useState(60);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerInstance = useRef<any>(null);
   const adFinishedRef = useRef(false);
 
-  // Refs for logic inside callback to avoid stale closure issues
+  // Refs for internal logic to avoid stale closures
   const isVideoForStartRef = useRef(false);
   const activeCoinIdRef = useRef<string | null>(null);
 
@@ -104,7 +105,6 @@ export const GameView: React.FC = () => {
     if (adFinishedRef.current) return;
     adFinishedRef.current = true;
 
-    // Awarding logic
     if (isVideoForStartRef.current) {
       startExpedition();
     } else if (activeCoinIdRef.current) {
@@ -113,14 +113,13 @@ export const GameView: React.FC = () => {
         const coin = prev.find(c => c.id === coinId);
         if (coin) {
           setMikelaReserves(m => m + coin.value);
-          addLog(`Data vytěžena: +${coin.value} MK`, 'success');
+          addLog(`Overview: Data úspěšně přenesena (+${coin.value} MK)`, 'success');
         }
         return prev.filter(c => c.id !== coinId);
       });
-      setActiveCoinId(null);
+      activeCoinIdRef.current = null;
     }
 
-    // Explicitly hide modal and cleanup
     setVideoAdVisible(false);
     if (playerInstance.current) {
       try { playerInstance.current.destroy(); } catch(e) {}
@@ -132,20 +131,22 @@ export const GameView: React.FC = () => {
     adFinishedRef.current = false;
     setIsVideoForStart(forStart);
     isVideoForStartRef.current = forStart;
-    setAdTimeRemaining(60);
+    setAdTimeRemaining(60); // Default fallback
+    setMaxAdDuration(60);
     setVideoAdVisible(true);
   };
 
   useEffect(() => {
     let countdownInterval: ReturnType<typeof setInterval>;
+    let durationCheckInterval: ReturnType<typeof setInterval>;
 
-    if (videoAdVisible && videoRef.current && window.fluidPlayer) {
+    if (videoAdVisible && videoRef.current && (window as any).fluidPlayer) {
       // Initialize Fluid Player
-      playerInstance.current = window.fluidPlayer(videoRef.current, {
+      playerInstance.current = (window as any).fluidPlayer(videoRef.current, {
         layoutControls: {
           fillToContainer: true,
           autoPlay: true,
-          mute: true,
+          mute: false,
           allowDownload: false,
           playbackRateControl: false,
           persistentSettings: { volume: false },
@@ -158,19 +159,39 @@ export const GameView: React.FC = () => {
               vastTag: VIDEO_AD_URL
             }
           ],
+          adStartedCallback: () => {
+            console.log("Fluid Player: Ad Started. Syncing duration with Overview panel...");
+            // Detect actual ad duration from the video element Fluid Player uses
+            durationCheckInterval = setInterval(() => {
+              const videoElement = videoRef.current;
+              if (videoElement && videoElement.duration && videoElement.duration > 0 && videoElement.duration !== Infinity) {
+                const actualDuration = Math.ceil(videoElement.duration);
+                console.log(`Detected duration: ${actualDuration}s`);
+                setAdTimeRemaining(actualDuration);
+                setMaxAdDuration(actualDuration);
+                clearInterval(durationCheckInterval);
+              }
+            }, 200);
+            
+            // Timeout safety for duration check
+            setTimeout(() => clearInterval(durationCheckInterval), 5000);
+          },
           adFinishedCallback: () => {
-            console.log("VAST Ad Finished");
+            console.log("Fluid Player: Ad Finished naturally. Triggering Overview completion.");
             handleRewardOnAdFinish();
           }
         }
       });
 
-      // 60-second absolute limit / Data Transfer simulation
+      // Overview UI countdown synchronizer
       countdownInterval = setInterval(() => {
         setAdTimeRemaining(prev => {
           if (prev <= 1) {
-            clearInterval(countdownInterval);
-            handleRewardOnAdFinish();
+            // If the timer reaches zero and the ad is still somehow running, we force close for user experience
+            if (!adFinishedRef.current) {
+               console.log("Overview: Timer expired. Auto-terminating player.");
+               handleRewardOnAdFinish();
+            }
             return 0;
           }
           return prev - 1;
@@ -179,6 +200,7 @@ export const GameView: React.FC = () => {
 
       return () => {
         if (countdownInterval) clearInterval(countdownInterval);
+        if (durationCheckInterval) clearInterval(durationCheckInterval);
         if (playerInstance.current) {
           try { playerInstance.current.destroy(); } catch(e) {}
           playerInstance.current = null;
@@ -257,49 +279,60 @@ export const GameView: React.FC = () => {
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
-      {/* VIDEO AD MODAL - RECONSTRUCTED FOR VISIBILITY */}
+      {/* OVERVIEW VIDEO MODAL - HIGH PRIORITY UI */}
       {videoAdVisible && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/95 backdrop-blur-3xl animate-in fade-in duration-300">
-          <div className="w-full max-w-5xl bg-black border-2 border-[#00f3ff]/40 shadow-[0_0_150px_rgba(0,243,255,0.2)] relative overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/98 backdrop-blur-2xl animate-in fade-in duration-300">
+          <div className="w-full max-w-6xl bg-black border-2 border-[#00f3ff]/50 shadow-[0_0_150px_rgba(0,243,255,0.2)] relative overflow-hidden flex flex-col">
             
-            {/* Minimal Header */}
-            <div className="p-4 border-b border-[#00f3ff]/20 flex justify-between items-center bg-[#050505] z-[1002]">
-               <div className="flex items-center gap-3">
-                 <Cpu className="text-[#00f3ff] animate-pulse" size={18} />
-                 <span className="text-[11px] font-black uppercase tracking-[0.4em]">OVĚŘOVÁNÍ_PROTISK_UPLINK</span>
+            {/* Overview Header */}
+            <div className="p-5 border-b border-[#00f3ff]/30 flex justify-between items-center bg-[#050505] z-[1001]">
+               <div className="flex items-center gap-4">
+                 <LayoutPanelLeft className="text-[#00f3ff] animate-pulse" size={24} />
+                 <span className="text-[14px] font-black uppercase tracking-[0.5em] neon-glow-cyan">Overview</span>
                </div>
-               <button onClick={() => setVideoAdVisible(false)} className="text-[#ff00ff] hover:text-white transition-all transform hover:rotate-90">
-                 <X size={24} />
-               </button>
+               <div className="flex items-center gap-6">
+                  <div className="h-6 w-[2px] bg-white/10" />
+                  <button onClick={() => setVideoAdVisible(false)} className="text-[#ff00ff] hover:text-white transition-all transform hover:rotate-90">
+                    <X size={28} />
+                  </button>
+               </div>
             </div>
 
-            {/* DATA TRANSFER STATUS BAR - Highly visible */}
-            <div className="relative w-full z-[1001] bg-black/80 backdrop-blur-md border-b border-[#00f3ff]/30 p-5 flex items-center justify-between shadow-2xl">
-               <div className="flex items-center gap-5">
+            {/* OVERVIEW DATA TRANSFER STATUS */}
+            <div className="relative w-full z-[1000] bg-black/90 backdrop-blur-xl border-b border-[#00f3ff]/20 p-8 flex items-center justify-between shadow-2xl overflow-hidden">
+               <div className="absolute inset-0 pointer-events-none opacity-5">
+                  <div className="w-full h-full bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,#00f3ff_2px,#00f3ff_3px)]" />
+               </div>
+               
+               <div className="flex items-center gap-8 relative">
                   <div className="relative">
-                    <div className="absolute inset-0 bg-[#00f3ff]/30 blur-xl animate-ping" />
-                    <HardDrive size={24} className="text-[#00f3ff] relative animate-pulse" />
+                    <div className="absolute inset-0 bg-[#00f3ff]/20 blur-3xl animate-ping" />
+                    <Share2 size={42} className="text-[#00f3ff] relative animate-pulse" />
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[12px] font-black uppercase tracking-[0.3em] text-[#00f3ff]">PROBÍHÁ PŘENOS DAT</span>
-                    <div className="flex items-center gap-2">
-                       <span className="text-[9px] text-white/40 uppercase tracking-widest font-bold">LINK_STABLE</span>
-                       <span className="text-[9px] text-[#ff00ff] font-bold animate-pulse">ENCRYPTING...</span>
+                    <span className="text-[18px] font-black uppercase tracking-[0.4em] text-[#00f3ff] mb-1">OVERVIEW: PŘENOS DAT</span>
+                    <div className="flex items-center gap-3">
+                       <span className="text-[11px] text-white/40 uppercase tracking-[0.2em] font-black">UPLINK_SYNCHRONIZATION_ACTIVE</span>
+                       <div className="flex items-center gap-1.5">
+                          <div className="w-1.5 h-1.5 bg-[#ff00ff] animate-bounce" style={{animationDelay: '0s'}} />
+                          <div className="w-1.5 h-1.5 bg-[#ff00ff] animate-bounce" style={{animationDelay: '0.2s'}} />
+                          <div className="w-1.5 h-1.5 bg-[#ff00ff] animate-bounce" style={{animationDelay: '0.4s'}} />
+                       </div>
                     </div>
                   </div>
                </div>
 
-               <div className="flex items-center gap-8">
+               <div className="flex items-center gap-12 relative">
                   <div className="text-right">
-                    <span className="text-[10px] text-white/40 uppercase font-black block mb-1">STAV_SYNCHRONIZACE</span>
-                    <div className="flex items-center gap-4">
-                       <span className="text-3xl font-black text-[#ff00ff] tabular-nums tracking-tighter drop-shadow-[0_0_10px_#ff00ff]">
-                          {String(adTimeRemaining).padStart(2, '0')}<span className="text-xs ml-1 opacity-50 uppercase">sec</span>
+                    <span className="text-[12px] text-white/40 uppercase font-black block mb-3 tracking-[0.1em]">ČAS DO DOKONČENÍ PŘENOSU</span>
+                    <div className="flex items-center gap-6">
+                       <span className="text-5xl font-black text-[#ff00ff] tabular-nums tracking-widest drop-shadow-[0_0_20px_#ff00ff]">
+                          {String(adTimeRemaining).padStart(2, '0')}<span className="text-sm ml-1 opacity-50 uppercase">sec</span>
                        </span>
-                       <div className="w-48 h-3 bg-white/5 border border-white/20 rounded-full overflow-hidden p-[2px]">
+                       <div className="w-80 h-6 bg-white/5 border-2 border-white/20 rounded-full overflow-hidden p-[5px] shadow-[inset_0_0_15px_rgba(0,0,0,1)]">
                           <div 
-                            className="h-full bg-gradient-to-r from-[#00f3ff] to-[#ff00ff] shadow-[0_0_15px_#00f3ff] transition-all duration-1000 ease-linear rounded-full"
-                            style={{ width: `${(adTimeRemaining / 60) * 100}%` }}
+                            className="h-full bg-gradient-to-r from-[#00f3ff] via-[#ff00ff] to-[#00f3ff] shadow-[0_0_25px_#00f3ff] transition-all duration-1000 ease-linear rounded-full"
+                            style={{ width: `${(adTimeRemaining / maxAdDuration) * 100}%` }}
                           />
                        </div>
                     </div>
@@ -307,21 +340,35 @@ export const GameView: React.FC = () => {
                </div>
             </div>
 
-            {/* Video Player Wrapper */}
-            <div className="aspect-video bg-black relative flex flex-col items-center justify-center overflow-hidden z-0">
-               <div className="w-full h-full">
-                  <video ref={videoRef} id="video-ad-player">
+            {/* Fluid Player Component Area */}
+            <div className="aspect-video bg-[#000] relative flex flex-col items-center justify-center overflow-hidden z-0 shadow-[inset_0_0_100px_rgba(0,0,0,1)]">
+               <div className="w-full h-full relative">
+                  <video ref={videoRef} id="video-ad-player" className="w-full h-full">
                     <source src="" type="video/mp4" />
                   </video>
+                  {/* Digital overlay on video */}
+                  <div className="absolute inset-0 pointer-events-none z-10 opacity-5 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[size:100%_2px,3px_100%]" />
                </div>
             </div>
 
-            {/* Tech Footer */}
-            <div className="p-3 bg-[#050505] flex justify-center border-t border-white/5">
-               <div className="flex items-center gap-4 opacity-20">
-                  <span className="text-[8px] uppercase tracking-[0.5em]">VAST_PROTOCOL_NODE_0x7F</span>
-                  <div className="w-1 h-1 bg-white rounded-full" />
-                  <span className="text-[8px] uppercase tracking-[0.5em]">AUTO_TERM_ACTIVE</span>
+            {/* Overview Technical Stats */}
+            <div className="p-4 bg-[#050505] flex justify-between items-center border-t border-white/10 px-10">
+               <div className="flex items-center gap-8 opacity-40">
+                  <div className="flex flex-col">
+                    <span className="text-[8px] uppercase tracking-widest text-white/60">NODE_ID</span>
+                    <span className="text-[10px] uppercase tracking-[0.2em] font-black text-[#00f3ff]">0x7F_VAST_SYNC</span>
+                  </div>
+                  <div className="flex flex-col border-l border-white/10 pl-6">
+                    <span className="text-[8px] uppercase tracking-widest text-white/60">STATUS</span>
+                    <span className="text-[10px] uppercase tracking-[0.2em] font-black text-[#00f3ff]">AUTO_CLOSE_ON_FINISH</span>
+                  </div>
+               </div>
+               <div className="flex items-center gap-4">
+                  <div className="flex flex-col items-end">
+                    <span className="text-[8px] uppercase tracking-widest text-white/40">INTEGRITY</span>
+                    <span className="text-[10px] text-[#00f3ff] font-black uppercase tracking-widest">ENCRYPTED_LINK_v3.4</span>
+                  </div>
+                  <Activity size={20} className="text-[#00f3ff] animate-pulse" />
                </div>
             </div>
           </div>
