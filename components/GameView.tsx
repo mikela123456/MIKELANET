@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { User, Sword, Package, Zap, Compass, Truck, Timer, Trophy, Shield, AlertTriangle, ChevronRight, Activity, Clock, Loader2, Coins, X, Terminal, Database, ShieldAlert as AlertIcon } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { User, Sword, Package, Zap, Compass, Truck, Timer, Trophy, Shield, AlertTriangle, ChevronRight, Activity, Clock, Loader2, Coins, X, Terminal, Database, ShieldAlert as AlertIcon, PlayCircle, Lock } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { AdBanner } from './AdBanner';
 
@@ -17,7 +17,6 @@ interface UpgradeItem {
   id: string;
   name: string;
   icon: any;
-  imgUrl?: string;
   level: number;
   baseCost: number;
   desc: string;
@@ -30,13 +29,15 @@ interface GameCoin {
   value: number;
 }
 
+const VIDEO_AD_URL = "https://groundedmine.com/d.mTFSzgdpGDNYvcZcGXUK/FeJm/9IuZZNUElDktPwTaYW3CNUz/YTwMNFD/ket-N/j_c/3qN/jPA/1cMuwy";
+const AD_WATCH_DURATION = 15; // Sekundy, po kterých se zobrazí tlačítko potvrzení
+
 export const GameView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<GameTab>('profile');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isGeneratingItems, setIsGeneratingItems] = useState(false);
   
-  const [mikelaReserves, setMikelaReserves] = useState(100);
+  const [mikelaReserves, setMikelaReserves] = useState(150);
   const [reputation, setReputation] = useState(1240);
   const [expeditionLevel, setExpeditionLevel] = useState(1);
 
@@ -57,23 +58,41 @@ export const GameView: React.FC = () => {
   const [activeAds, setActiveAds] = useState<{id: number}[]>([]);
   const [adsDestroyed, setAdsDestroyed] = useState(0);
   const [preLaunchAdVisible, setPreLaunchAdVisible] = useState(false);
-  const [videoAdVisible, setVideoAdVisible] = useState(false);
-  const [activeCoinId, setActiveCoinId] = useState<string | null>(null);
   
-  const [expeditionEndTime, setExpeditionEndTime] = useState<number | null>(null);
-  const [currentExpeditionDuration, setCurrentExpeditionDuration] = useState<number>(0);
+  // Video Ad States
+  const [videoAdVisible, setVideoAdVisible] = useState(false);
+  const [videoAdTimer, setVideoAdTimer] = useState(0);
+  const [activeCoinId, setActiveCoinId] = useState<string | null>(null);
+  const [isVideoForStart, setIsVideoForStart] = useState(false);
 
-  const calculateTotalDuration = (level: number) => Math.max(15, 25 + (level - 1) * 5);
+  const calculateTotalDuration = (level: number) => Math.max(15, 20 + (level - 1) * 4);
 
   const addLog = (text: string, type: 'info' | 'warn' | 'success' | 'error' = 'info') => {
-    setLogs(prev => [{ id: Math.random().toString(), text, type }, ...prev].slice(0, 15));
+    setLogs(prev => [{ id: Math.random().toString(), text, type }, ...prev].slice(0, 12));
   };
 
+  // Video Ad Trigger Logic
+  const openVideoAd = (forStart: boolean = false) => {
+    setIsVideoForStart(forStart);
+    setVideoAdVisible(true);
+    setVideoAdTimer(AD_WATCH_DURATION);
+  };
+
+  useEffect(() => {
+    let timer: number;
+    if (videoAdVisible && videoAdTimer > 0) {
+      timer = window.setInterval(() => {
+        setVideoAdTimer(prev => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [videoAdVisible, videoAdTimer]);
+
   const startExpedition = () => {
-    setPreLaunchAdVisible(false);
+    setVideoAdVisible(false);
     const baseDuration = calculateTotalDuration(expeditionLevel);
     const spdLevel = upgrades.find(u => u.id === 'spd')?.level || 1;
-    const effectiveDuration = Math.ceil(baseDuration * (1 - Math.min(0.6, (spdLevel - 1) * 0.05)));
+    const effectiveDuration = Math.ceil(baseDuration * (1 - Math.min(0.6, (spdLevel - 1) * 0.06)));
     
     setExpeditionEndTime(Date.now() + (effectiveDuration * 1000));
     setCurrentExpeditionDuration(effectiveDuration);
@@ -86,37 +105,42 @@ export const GameView: React.FC = () => {
     setCoins([]);
     
     setActiveAds([{ id: Date.now() }]);
-    addLog(`Navazování spojení se Sektorem 0x${expeditionLevel.toString(16).toUpperCase()}`, 'info');
+    addLog(`Navázáno spojení se Sektorem 0x${expeditionLevel.toString(16).toUpperCase()}`, 'info');
   };
+
+  const [expeditionEndTime, setExpeditionEndTime] = useState<number | null>(null);
+  const [currentExpeditionDuration, setCurrentExpeditionDuration] = useState<number>(0);
 
   const handleAdDestroyed = (id: number) => {
     setActiveAds(prev => prev.filter(ad => ad.id !== id));
     setAdsDestroyed(prev => prev + 1);
-    addLog(`Anomálie eliminována. Integrita +10%`, 'success');
+    addLog(`Anomálie eliminována: +1 fragment`, 'success');
     
     setTimeout(() => {
-      if (activeExpedition && timeLeft > 5) {
+      if (activeExpedition && timeLeft > 4) {
         setActiveAds(prev => [...prev, { id: Date.now() }]);
       }
-    }, 2000);
+    }, 2500);
   };
 
   const handleCoinClick = (id: string) => {
     setActiveCoinId(id);
-    setVideoAdVisible(true);
+    openVideoAd(false);
   };
 
-  const claimCoinReward = () => {
-    if (activeCoinId) {
+  const claimVideoReward = () => {
+    if (isVideoForStart) {
+      startExpedition();
+    } else if (activeCoinId) {
       const coin = coins.find(c => c.id === activeCoinId);
       if (coin) {
         setMikelaReserves(prev => prev + coin.value);
         setCoins(prev => prev.filter(c => c.id !== activeCoinId));
-        addLog(`Dekódováno ${coin.value} MK z datového fragmentu`, 'success');
+        addLog(`Dekódováno: +${coin.value} MK`, 'success');
       }
+      setVideoAdVisible(false);
+      setActiveCoinId(null);
     }
-    setVideoAdVisible(false);
-    setActiveCoinId(null);
   };
 
   useEffect(() => {
@@ -133,28 +157,28 @@ export const GameView: React.FC = () => {
       setProgress(currentProgress);
 
       setPhase(prev => {
-        if (currentProgress < 20) return 'STARTING';
-        if (currentProgress < 80) return 'TRAVELING';
+        if (currentProgress < 15) return 'STARTING';
+        if (currentProgress < 85) return 'TRAVELING';
         return 'EXTRACTING';
       });
 
-      if (Math.random() < 0.04 && coins.length < 2 && currentProgress > 10 && currentProgress < 85) {
+      if (Math.random() < 0.05 && coins.length < 2 && currentProgress > 20 && currentProgress < 80) {
         setCoins(prev => [...prev, {
           id: Math.random().toString(),
-          x: 15 + Math.random() * 70,
-          y: 20 + Math.random() * 50,
-          value: Math.floor(80 * expeditionLevel * (1 + Math.random()))
+          x: 20 + Math.random() * 60,
+          y: 25 + Math.random() * 50,
+          value: Math.floor(120 * expeditionLevel * (1 + Math.random() * 0.5))
         }]);
       }
 
       if (now >= expeditionEndTime) {
         clearInterval(interval);
-        const success = adsDestroyed >= Math.floor(expeditionLevel * 0.8) || Math.random() > 0.3;
+        const success = adsDestroyed >= Math.floor(expeditionLevel * 0.7) || Math.random() > 0.4;
         if (success) {
           setPhase('COMPLETED');
-          const reward = Math.floor(100 * expeditionLevel + (adsDestroyed * 30));
+          const reward = Math.floor(120 * expeditionLevel + (adsDestroyed * 35));
           setMikelaReserves(p => p + reward);
-          setReputation(p => p + expeditionLevel * 50);
+          setReputation(p => p + expeditionLevel * 40);
           setExpeditionLevel(p => p + 1);
         } else {
           setPhase('FAILED');
@@ -166,64 +190,68 @@ export const GameView: React.FC = () => {
   }, [activeExpedition, expeditionEndTime, adsDestroyed, expeditionLevel, phase, coins]);
 
   return (
-    <div className="flex h-full w-full bg-[#050505] border-t border-[#00f3ff]/20 relative overflow-hidden font-mono">
+    <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
-      {/* Video Ad Modal */}
+      {/* GLOBAL VIDEO AD OVERLAY */}
       {videoAdVisible && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md">
-          <div className="w-full max-w-4xl p-1 bg-[#ff00ff]/30 border border-[#ff00ff]/60 shadow-[0_0_100px_rgba(255,0,255,0.2)]">
-            <div className="bg-black p-4 flex justify-between items-center border-b border-[#ff00ff]/30">
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 bg-[#ff00ff] animate-pulse" />
-                <span className="text-xs font-black text-[#ff00ff] uppercase tracking-widest">HLOUBKOVÁ_DEKRYPTACE</span>
-              </div>
-              <button onClick={() => setVideoAdVisible(false)} className="text-white/40 hover:text-white"><X size={20} /></button>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="w-full max-w-5xl bg-black border border-[#00f3ff]/20 shadow-[0_0_100px_rgba(0,243,255,0.15)] relative">
+            <div className="p-4 border-b border-[#00f3ff]/20 flex justify-between items-center bg-black">
+               <div className="flex items-center gap-3">
+                 <div className="w-2 h-2 bg-red-600 animate-pulse" />
+                 <span className="text-xs font-black uppercase tracking-[0.2em]">{isVideoForStart ? 'PŘED-START_VERIFIKACE' : 'DATAVÝ_UPLINK_AUTORIZACE'}</span>
+               </div>
+               {videoAdTimer <= 0 && (
+                 <button onClick={() => setVideoAdVisible(false)} className="text-white/40 hover:text-white transition-colors">
+                   <X size={20} />
+                 </button>
+               )}
             </div>
-            
-            <div className="aspect-video bg-black relative">
-              <iframe 
-                src="https://groundedmine.com/d.mTFSzgdpGDNYvcZcGXUK/FeJm/9IuZZNUElDktPwTaYW3CNUz/YTwMNFD/ket-N/j_c/3qN/jPA/1cMuwy"
+
+            <div className="aspect-video bg-black relative group">
+               <iframe 
+                src={VIDEO_AD_URL}
                 className="w-full h-full border-0"
                 allow="autoplay; encrypted-media"
-                title="Reward Auth"
-              />
-              <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black to-transparent flex justify-end">
-                <button onClick={claimCoinReward} className="px-8 py-3 bg-[#ff00ff] text-black font-black uppercase text-[11px] tracking-widest hover:bg-white transition-all">
-                  POTVRDIT_DEKÓDOVÁNÍ
-                </button>
-              </div>
+                title="Secure Ad Bridge"
+               />
+               
+               {/* Overlay with timer or confirm button */}
+               <div className="absolute bottom-0 left-0 w-full p-8 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col items-center gap-4">
+                  {videoAdTimer > 0 ? (
+                    <div className="flex flex-col items-center gap-2">
+                       <Loader2 className="animate-spin text-[#00f3ff]/60" size={24} />
+                       <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#00f3ff]/60">Autorizace probíhá: {videoAdTimer}s</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-6 animate-in zoom-in duration-300">
+                       <p className="text-[11px] font-black uppercase tracking-[0.2em] text-green-400">Verifikace dokončena</p>
+                       <button 
+                        onClick={claimVideoReward} 
+                        className="px-12 py-4 bg-[#ff00ff] text-black font-black uppercase text-xs tracking-[0.4em] hover:bg-white transition-all shadow-[0_0_30px_rgba(255,0,255,0.4)]"
+                       >
+                         POTVRDIT_PŘENOS
+                       </button>
+                    </div>
+                  )}
+               </div>
+            </div>
+
+            {/* HilltopAds / Adsterra Compliance footer */}
+            <div className="p-2 bg-[#050505] text-center border-t border-white/5">
+               <span className="text-[7px] opacity-20 uppercase tracking-widest">Powered by Secure Link Protocol v8.4.1 - 2024 Digital Future Systems</span>
             </div>
           </div>
         </div>
       )}
 
-      {/* Pre-launch Overlay */}
-      {preLaunchAdVisible && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/90 backdrop-blur-xl">
-          <div className="w-full max-w-md bg-[#050505] border-2 border-[#00f3ff]/40 p-10 shadow-[0_0_50px_rgba(0,243,255,0.2)] text-center">
-            <AlertIcon className="text-[#00f3ff] mx-auto mb-6 animate-pulse" size={48} />
-            <h2 className="text-2xl font-black text-white uppercase italic mb-2">AUTORIZACE_PŘENOSU</h2>
-            <p className="text-[10px] text-[#00f3ff]/60 uppercase tracking-widest mb-8">Stabilizujte reklamní uzel pro start expedice</p>
-            
-            <div className="flex justify-center mb-10">
-              <AdBanner playerAtk={1} />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <button onClick={() => setPreLaunchAdVisible(false)} className="py-4 border border-white/10 text-white/30 text-[10px] font-black uppercase tracking-widest hover:text-white">STORNO</button>
-              <button onClick={startExpedition} className="py-4 bg-[#00f3ff] text-black text-[10px] font-black uppercase tracking-widest hover:bg-white">POTVRDIT_START</button>
-            </div>
-          </div>
+      {/* Sidebar navigation */}
+      <aside className="w-20 md:w-64 border-r border-white/5 bg-black/40 flex flex-col py-8 z-20">
+        <div className="mb-12 flex flex-col items-center gap-2">
+          <Database className="text-[#00f3ff] animate-pulse" size={20} />
+          <span className="hidden md:block text-[8px] text-[#00f3ff]/40 uppercase font-black tracking-[0.4em]">SYSTEM_HUB</span>
         </div>
-      )}
-
-      {/* Sidebar Navigation */}
-      <aside className="w-20 md:w-64 border-r border-[#00f3ff]/10 bg-black/80 flex flex-col py-8 z-20">
-        <div className="mb-12 flex flex-col items-center">
-          <Database className="text-[#00f3ff] mb-2" size={24} />
-          <span className="hidden md:block text-[8px] text-[#00f3ff]/40 uppercase font-black tracking-[0.5em]">SYSTEM_CORE</span>
-        </div>
-        <nav className="flex-1 space-y-2 px-2">
+        <nav className="flex-1 space-y-1 px-2">
           {[
             { id: 'profile' as GameTab, icon: User, label: 'Profil' },
             { id: 'expeditions' as GameTab, icon: Compass, label: 'Expedice' },
@@ -232,10 +260,10 @@ export const GameView: React.FC = () => {
             <button
               key={item.id}
               onClick={() => { setActiveTab(item.id); setActiveExpedition(false); }}
-              className={`w-full flex items-center justify-center md:justify-start gap-4 p-4 transition-all ${activeTab === item.id ? 'bg-[#00f3ff]/5 text-[#00f3ff] border-r-2 border-[#00f3ff]' : 'text-white/20 hover:text-white'}`}
+              className={`w-full flex items-center justify-center md:justify-start gap-4 p-4 transition-all duration-300 ${activeTab === item.id ? 'bg-[#00f3ff]/5 text-[#00f3ff] border-r-2 border-[#00f3ff]' : 'text-white/20 hover:text-white hover:bg-white/5'}`}
             >
-              <item.icon size={20} />
-              <span className="hidden md:block text-[10px] font-black uppercase tracking-widest">{item.label}</span>
+              <item.icon size={18} />
+              <span className="hidden md:block text-[9px] font-black uppercase tracking-widest">{item.label}</span>
             </button>
           ))}
         </nav>
@@ -243,39 +271,45 @@ export const GameView: React.FC = () => {
 
       <main className="flex-1 relative flex flex-col overflow-hidden">
         {activeExpedition ? (
-          <div className="flex flex-col h-full animate-in fade-in duration-500">
-            {/* HUD Header */}
-            <div className="p-6 border-b border-[#00f3ff]/20 bg-black/60 flex justify-between items-center">
-              <div className="flex items-center gap-6">
-                <div className="flex flex-col">
-                  <span className="text-[9px] text-[#00f3ff]/60 uppercase font-black">Lokalita</span>
-                  <span className="text-xl font-black text-white italic uppercase tracking-widest">Sector_0x{expeditionLevel}</span>
+          <div className="flex flex-col h-full animate-in fade-in duration-700">
+            {/* HUD Header - More compact and clearer */}
+            <div className="px-8 py-5 border-b border-white/5 bg-black/80 flex justify-between items-center backdrop-blur-md">
+              <div className="flex items-center gap-8">
+                <div className="space-y-1">
+                  <span className="text-[7px] text-[#00f3ff]/40 uppercase font-black block">Mission Sector</span>
+                  <span className="text-lg font-black text-white italic uppercase tracking-[0.1em]">0x{expeditionLevel.toString(16).toUpperCase()}</span>
                 </div>
-                <div className="h-8 w-[1px] bg-white/10" />
-                <div className="flex flex-col">
-                  <span className="text-[9px] text-[#00f3ff]/60 uppercase font-black">Status</span>
-                  <span className="text-sm font-black text-[#00f3ff] uppercase tracking-widest animate-pulse">{phase}</span>
+                <div className="h-10 w-[1px] bg-white/10" />
+                <div className="space-y-1">
+                  <span className="text-[7px] text-[#00f3ff]/40 uppercase font-black block">Signal Integrity</span>
+                  <span className="text-xs font-black text-[#00f3ff] uppercase tracking-widest animate-pulse">{phase}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-4 bg-[#00f3ff]/5 border border-[#00f3ff]/20 px-6 py-3">
-                <Clock className="text-[#00f3ff]" size={18} />
-                <span className="text-2xl font-black text-[#00f3ff] tabular-nums">
-                  {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}
-                </span>
+              
+              <div className="flex items-center gap-6">
+                <div className="text-right">
+                   <span className="text-[7px] text-white/20 uppercase font-black block">Chunks Extracted</span>
+                   <span className="text-sm font-bold text-[#ff00ff]">{adsDestroyed} / {Math.floor(expeditionLevel * 0.7)}</span>
+                </div>
+                <div className="flex items-center gap-4 bg-white/5 border border-white/10 px-8 py-3 rounded-sm shadow-inner">
+                  <Clock className="text-[#00f3ff]" size={16} />
+                  <span className="text-xl font-mono font-black text-[#00f3ff] tabular-nums">
+                    {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* Tactical View Container */}
+            {/* Tactical View - Improved grid and visibility */}
             <div className="flex-1 flex overflow-hidden">
-              {/* Map/Radar Area */}
-              <div className="flex-1 relative bg-black overflow-hidden shadow-[inset_0_0_100px_rgba(0,0,0,1)]">
-                {/* Tactical Grid Background */}
-                <div className="absolute inset-0 tactical-grid opacity-20" />
+              <div className="flex-1 relative bg-[#010101] overflow-hidden">
+                <div className="absolute inset-0 tactical-grid opacity-[0.07]" />
+                <div className="absolute inset-0 bg-radial-vignette pointer-events-none" />
                 
-                {/* Ads Layer */}
-                <div className="absolute inset-0 z-30 pointer-events-none p-10 flex flex-wrap content-start justify-center gap-6">
+                {/* Ads Layer - Banners centered or strategically placed */}
+                <div className="absolute inset-0 z-30 pointer-events-none p-12 flex flex-col items-center gap-8">
                   {activeAds.map(ad => (
-                    <div key={ad.id} className="pointer-events-auto">
+                    <div key={ad.id} className="pointer-events-auto shadow-2xl animate-in fade-in slide-in-from-top-4 duration-500">
                       <AdBanner onDestroyed={() => handleAdDestroyed(ad.id)} playerAtk={upgrades[0].level} />
                     </div>
                   ))}
@@ -287,149 +321,186 @@ export const GameView: React.FC = () => {
                     <button 
                       key={coin.id}
                       onClick={() => handleCoinClick(coin.id)}
-                      className="absolute pointer-events-auto group animate-in zoom-in duration-500 hover:scale-110 transition-transform"
+                      className="absolute pointer-events-auto group animate-in zoom-in duration-700"
                       style={{ left: `${coin.x}%`, top: `${coin.y}%` }}
                     >
-                       <div className="relative">
-                          <div className="absolute inset-0 bg-[#ff00ff] blur-md opacity-40 animate-pulse" />
-                          <div className="bg-black border border-[#ff00ff] p-3 flex flex-col items-center shadow-[0_0_20px_rgba(255,0,255,0.4)]">
-                            <Coins className="text-[#ff00ff] mb-1" size={24} />
-                            <span className="text-[8px] font-black text-[#ff00ff]">EXTRACT_DATA</span>
+                       <div className="relative hover:scale-110 transition-transform">
+                          <div className="absolute inset-0 bg-[#ff00ff] blur-xl opacity-30 animate-pulse" />
+                          <div className="bg-black border-2 border-[#ff00ff] p-4 flex flex-col items-center gap-1 shadow-[0_0_30px_rgba(255,0,255,0.3)] group-hover:border-white transition-colors">
+                            <Coins className="text-[#ff00ff] group-hover:text-white" size={32} />
+                            <span className="text-[8px] font-black text-[#ff00ff] group-hover:text-white">EXTRACT_{coin.value}_MK</span>
                           </div>
                        </div>
                     </button>
                   ))}
                 </div>
 
-                {/* Status Overlays */}
+                {/* Phase specific messages */}
+                {phase === 'STARTING' && (
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none opacity-40">
+                     <div className="flex flex-col items-center gap-4">
+                        <Activity size={48} className="animate-pulse" />
+                        <h4 className="text-xl font-black uppercase tracking-[0.5em]">Synchronizace...</h4>
+                     </div>
+                  </div>
+                )}
+
+                {/* Completion Overlays */}
                 {phase === 'COMPLETED' && (
-                  <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm animate-in zoom-in duration-500">
-                    <div className="text-center">
-                      <Trophy size={80} className="text-[#00f3ff] mx-auto mb-6 animate-bounce" />
-                      <h2 className="text-6xl font-black text-white italic uppercase tracking-tighter mb-8">MISE_SPLNĚNA</h2>
-                      <button onClick={() => setActiveExpedition(false)} className="px-20 py-5 bg-[#00f3ff] text-black font-black uppercase tracking-[0.5em] hover:bg-white">NÁVRAT</button>
+                  <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in zoom-in duration-500">
+                    <div className="text-center p-16 border-2 border-[#00f3ff]/40 bg-black/60 shadow-[0_0_100px_rgba(0,243,255,0.2)]">
+                      <Trophy size={100} className="text-[#00f3ff] mx-auto mb-8 animate-bounce" />
+                      <h2 className="text-6xl font-black text-white italic uppercase tracking-tighter mb-4">DATOVÁ_ŽEŇ_ÚSPĚŠNÁ</h2>
+                      <p className="text-[10px] text-[#00f3ff] uppercase font-black mb-12 tracking-widest opacity-60">Všechny linky stabilizovány | Sektor vyčištěn</p>
+                      <button onClick={() => setActiveExpedition(false)} className="px-24 py-6 bg-[#00f3ff] text-black font-black uppercase tracking-[0.6em] hover:bg-white transition-all text-sm">NÁVRAT_NA_ZÁKLADNU</button>
                     </div>
                   </div>
                 )}
 
                 {phase === 'FAILED' && (
-                  <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm">
-                    <div className="text-center">
-                      <AlertTriangle size={80} className="text-red-500 mx-auto mb-6" />
-                      <h2 className="text-6xl font-black text-white italic uppercase tracking-tighter mb-8">PŘIPOJENÍ_ZTRACENO</h2>
-                      <button onClick={() => setActiveExpedition(false)} className="px-20 py-5 bg-red-600 text-white font-black uppercase tracking-[0.5em]">REBOOT</button>
+                  <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md">
+                    <div className="text-center p-16 border-2 border-red-600 bg-black/60">
+                      <AlertTriangle size={100} className="text-red-600 mx-auto mb-8 animate-pulse" />
+                      <h2 className="text-6xl font-black text-white italic uppercase tracking-tighter mb-4">LINK_ZTRACEN</h2>
+                      <p className="text-[10px] text-red-600 uppercase font-black mb-12 tracking-widest opacity-60">Detekován systémový firewall | Spojení ukončeno</p>
+                      <button onClick={() => setActiveExpedition(false)} className="px-24 py-6 bg-red-600 text-white font-black uppercase tracking-[0.6em] transition-all text-sm">REBOOT_SYSTÉM</button>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Terminal Log Sidebar */}
-              <div className="w-80 border-l border-[#00f3ff]/20 bg-black/40 flex flex-col">
-                <div className="p-4 border-b border-[#00f3ff]/10 flex items-center gap-2">
-                  <Terminal size={14} className="text-[#00f3ff]" />
-                  <span className="text-[10px] text-[#00f3ff] font-black uppercase tracking-widest">Live_Terminal</span>
+              {/* Terminal sidebar - clearer spacing */}
+              <div className="w-80 border-l border-white/5 bg-[#050505] flex flex-col shadow-2xl">
+                <div className="p-5 border-b border-white/5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Terminal size={14} className="text-[#00f3ff]" />
+                    <span className="text-[10px] text-[#00f3ff] font-black uppercase tracking-widest">Live_Logs</span>
+                  </div>
+                  <div className="flex gap-1">
+                    <div className="w-1 h-1 bg-green-500 rounded-full animate-ping" />
+                  </div>
                 </div>
-                <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-5 space-y-3 custom-scrollbar">
                   {logs.map(log => (
-                    <div key={log.id} className={`text-[9px] uppercase leading-relaxed flex gap-2 animate-in slide-in-from-right duration-300 ${log.type === 'success' ? 'text-green-500' : log.type === 'error' ? 'text-red-500' : 'text-[#00f3ff]/60'}`}>
-                      <span className="opacity-40">[{new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}]</span>
-                      <span className="font-bold">{log.text}</span>
+                    <div key={log.id} className={`text-[10px] uppercase leading-relaxed border-l-2 pl-3 transition-all animate-in slide-in-from-right duration-300 ${log.type === 'success' ? 'border-green-500 text-green-400' : log.type === 'error' ? 'border-red-600 text-red-400' : 'border-[#00f3ff]/20 text-[#00f3ff]/50'}`}>
+                      <div className="flex justify-between items-center opacity-40 text-[7px] mb-1">
+                         <span>EVENT_{log.id.slice(-4)}</span>
+                         <span>{new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'})}</span>
+                      </div>
+                      <span className="font-bold tracking-tight">{log.text}</span>
                     </div>
                   ))}
                 </div>
-                <div className="p-4 bg-black/60 border-t border-[#00f3ff]/10">
-                   <div className="flex justify-between text-[10px] text-[#00f3ff] font-black mb-2">
-                      <span>SYNC_PROGRESS</span>
-                      <span>{progress}%</span>
-                   </div>
-                   <div className="h-1 bg-white/5 relative">
-                      <div className="h-full bg-[#00f3ff] shadow-[0_0_10px_#00f3ff]" style={{ width: `${progress}%` }} />
+                <div className="p-6 bg-black border-t border-white/5 space-y-4">
+                   <div className="space-y-2">
+                      <div className="flex justify-between text-[9px] text-[#00f3ff] font-black tracking-widest">
+                        <span>MISSION_PROGRESS</span>
+                        <span>{progress}%</span>
+                      </div>
+                      <div className="h-2 bg-white/5 relative rounded-full overflow-hidden">
+                        <div className="h-full bg-[#00f3ff] shadow-[0_0_15px_rgba(0,243,255,0.6)] transition-all duration-300" style={{ width: `${progress}%` }} />
+                      </div>
                    </div>
                 </div>
               </div>
             </div>
           </div>
         ) : (
-          <div className="max-w-5xl mx-auto py-12 px-8 w-full h-full overflow-y-auto custom-scrollbar">
+          <div className="max-w-6xl mx-auto py-16 px-10 w-full h-full overflow-y-auto custom-scrollbar bg-radial-vignette">
             {activeTab === 'profile' && (
-              <div className="space-y-10">
-                <div className="flex items-center gap-10 p-12 bg-white/5 border border-white/10 relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 p-4 opacity-10"><Database size={120} /></div>
-                  <div className="relative w-40 h-40 border-2 border-[#00f3ff] p-2 bg-black">
-                    {avatarUrl ? <img src={avatarUrl} className="w-full h-full object-cover pixelated" /> : <div className="w-full h-full bg-white/5 flex items-center justify-center"><User size={64} className="text-white/10" /></div>}
+              <div className="space-y-12 animate-in slide-in-from-bottom-8 duration-500">
+                <div className="flex items-center gap-12 p-14 bg-white/[0.02] border border-white/5 relative overflow-hidden group shadow-2xl">
+                  <div className="absolute top-0 right-0 p-8 opacity-5 -rotate-12 transform group-hover:scale-110 transition-transform"><Database size={240} /></div>
+                  <div className="relative w-48 h-48 border-2 border-[#00f3ff] p-2 bg-black shadow-[0_0_30px_rgba(0,243,255,0.15)]">
+                    {avatarUrl ? <img src={avatarUrl} className="w-full h-full object-cover pixelated" /> : <div className="w-full h-full bg-white/5 flex items-center justify-center"><User size={80} className="text-white/10" /></div>}
                   </div>
-                  <div className="space-y-4">
-                    <h2 className="text-5xl font-black text-white italic uppercase tracking-tighter">ADMIN_77</h2>
-                    <div className="flex gap-6">
-                      <div className="flex flex-col"><span className="text-[10px] text-[#00f3ff] font-black uppercase">Reserves</span><span className="text-2xl font-black text-white">{mikelaReserves} MK</span></div>
-                      <div className="flex flex-col"><span className="text-[10px] text-[#ff00ff] font-black uppercase">Reputation</span><span className="text-2xl font-black text-white">{reputation}</span></div>
+                  <div className="space-y-6 relative z-10">
+                    <h2 className="text-6xl font-black text-white italic uppercase tracking-tighter">ADMIN_77</h2>
+                    <div className="flex gap-10">
+                      <div className="flex flex-col border-l-2 border-[#00f3ff] pl-6"><span className="text-[10px] text-[#00f3ff] font-black uppercase tracking-widest mb-1">MIKELA_RESERVES</span><span className="text-3xl font-black text-white">{mikelaReserves} MK</span></div>
+                      <div className="flex flex-col border-l-2 border-[#ff00ff] pl-6"><span className="text-[10px] text-[#ff00ff] font-black uppercase tracking-widest mb-1">REPUTATION_XP</span><span className="text-3xl font-black text-white">{reputation}</span></div>
                     </div>
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                   <div className="p-8 border border-white/5 bg-white/[0.02] space-y-2">
-                      <span className="text-[10px] text-white/40 uppercase font-black">Level Expedice</span>
-                      <p className="text-3xl font-black text-[#00f3ff]">0x{expeditionLevel.toString(16).toUpperCase()}</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                   <div className="p-10 border border-white/5 bg-white/[0.01] hover:bg-white/[0.03] transition-colors space-y-3">
+                      <span className="text-[10px] text-white/40 uppercase font-black tracking-widest block">System Tier</span>
+                      <p className="text-4xl font-black text-[#00f3ff]">0x{expeditionLevel.toString(16).toUpperCase()}</p>
                    </div>
-                   <div className="p-8 border border-white/5 bg-white/[0.02] space-y-2">
-                      <span className="text-[10px] text-white/40 uppercase font-black">Zničené Anomálie</span>
-                      <p className="text-3xl font-black text-[#ff00ff]">{adsDestroyed}</p>
+                   <div className="p-10 border border-white/5 bg-white/[0.01] hover:bg-white/[0.03] transition-colors space-y-3">
+                      <span className="text-[10px] text-white/40 uppercase font-black tracking-widest block">Anomalies Purged</span>
+                      <p className="text-4xl font-black text-[#ff00ff]">{adsDestroyed}</p>
                    </div>
-                   <div className="p-8 border border-white/5 bg-white/[0.02] space-y-2">
-                      <span className="text-[10px] text-white/40 uppercase font-black">Uptime</span>
-                      <p className="text-3xl font-black text-white">99.9%</p>
+                   <div className="p-10 border border-white/5 bg-white/[0.01] hover:bg-white/[0.03] transition-colors space-y-3">
+                      <span className="text-[10px] text-white/40 uppercase font-black tracking-widest block">Uplink Health</span>
+                      <p className="text-4xl font-black text-green-500">STABLE</p>
                    </div>
                 </div>
               </div>
             )}
 
             {activeTab === 'expeditions' && (
-              <div className="h-full flex flex-col items-center justify-center space-y-8 animate-in zoom-in duration-500">
-                <div className="w-full max-w-2xl text-center space-y-12">
+              <div className="h-full flex flex-col items-center justify-center space-y-12 animate-in zoom-in duration-500">
+                <div className="w-full max-w-2xl text-center space-y-16">
                   <div className="relative inline-block">
-                    <div className="absolute inset-0 bg-[#00f3ff] blur-3xl opacity-20 animate-pulse" />
-                    <Compass size={120} className="text-[#00f3ff] mx-auto relative" />
+                    <div className="absolute inset-0 bg-[#00f3ff] blur-[100px] opacity-20 animate-pulse" />
+                    <Compass size={160} className="text-[#00f3ff] mx-auto relative drop-shadow-[0_0_20px_rgba(0,243,255,0.5)]" />
                   </div>
-                  <div>
-                    <h2 className="text-4xl font-black text-white uppercase italic tracking-widest mb-4">HLUBOKÝ_PRŮNIK</h2>
-                    <p className="text-xs text-white/40 max-w-md mx-auto leading-relaxed">Vyberte si sektor pro extrakci dat. Buďte připraveni na systémové anomálie a fragmenty ztracených dat.</p>
+                  <div className="space-y-6">
+                    <h2 className="text-5xl font-black text-white uppercase italic tracking-[0.2em]">VSTOUPIT_DO_DATOVÉHO_TOKŮ</h2>
+                    <p className="text-xs text-[#00f3ff]/60 max-w-lg mx-auto leading-loose tracking-widest">
+                      Detekován Sektor 0x{expeditionLevel.toString(16).toUpperCase()}. Před vstupem je nutná autorizace zabezpečeného přenosu prostřednictvím reklamního uzlu HilltopAds.
+                    </p>
                   </div>
                   <button 
-                    onClick={() => setPreLaunchAdVisible(true)}
-                    className="group relative px-20 py-6 border-2 border-[#00f3ff] overflow-hidden transition-all hover:bg-[#00f3ff] hover:text-black"
+                    onClick={() => openVideoAd(true)}
+                    className="group relative px-28 py-8 border-2 border-[#00f3ff] overflow-hidden transition-all hover:bg-[#00f3ff] hover:text-black hover:scale-105 active:scale-95 shadow-[0_0_50px_rgba(0,243,255,0.2)]"
                   >
-                    <span className="relative z-10 text-xl font-black uppercase tracking-[0.4em]">START_EXPEDICE</span>
+                    <div className="absolute inset-0 translate-y-full group-hover:translate-y-0 bg-[#00f3ff] transition-transform duration-300" />
+                    <div className="relative z-10 flex items-center gap-4">
+                       <PlayCircle size={24} />
+                       <span className="text-2xl font-black uppercase tracking-[0.3em]">START_AUTORIZACE</span>
+                    </div>
                   </button>
                 </div>
               </div>
             )}
 
             {activeTab === 'items' && (
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-10 animate-in slide-in-from-right-8 duration-500">
                   {upgrades.map(u => {
                     const cost = Math.floor(u.baseCost * Math.pow(1.6, u.level - 1));
+                    const canAfford = mikelaReserves >= cost;
                     return (
-                      <div key={u.id} className="p-10 border border-white/10 bg-white/[0.02] hover:border-[#ff00ff]/50 transition-colors flex flex-col">
-                        <div className="flex justify-between items-start mb-8">
-                          <div className="w-16 h-16 bg-black border border-[#ff00ff]/40 flex items-center justify-center">
-                            <u.icon className="text-[#ff00ff]" size={32} />
+                      <div key={u.id} className={`p-12 border transition-all duration-300 flex flex-col bg-white/[0.01] hover:bg-white/[0.03] ${canAfford ? 'border-white/10 hover:border-[#ff00ff]/60' : 'border-white/5 opacity-50 grayscale'}`}>
+                        <div className="flex justify-between items-start mb-10">
+                          <div className="w-20 h-20 bg-black border border-white/10 flex items-center justify-center shadow-inner">
+                            <u.icon className={canAfford ? 'text-[#ff00ff]' : 'text-white/20'} size={40} />
                           </div>
-                          <span className="text-2xl font-black text-[#ff00ff] italic">LV_{u.level}</span>
+                          <div className="text-right">
+                             <span className="text-3xl font-black text-[#ff00ff] italic block">LV_{u.level}</span>
+                             <span className="text-[8px] text-white/40 font-bold uppercase tracking-widest">Upgrade Available</span>
+                          </div>
                         </div>
-                        <h4 className="text-xl font-black text-white uppercase mb-2">{u.name}</h4>
-                        <p className="text-[11px] text-white/40 uppercase mb-10 leading-relaxed">{u.desc}</p>
+                        <h4 className="text-2xl font-black text-white uppercase mb-4 tracking-tight">{u.name}</h4>
+                        <p className="text-[11px] text-white/30 uppercase mb-12 leading-relaxed tracking-wider">{u.desc}</p>
+                        
                         <button 
                           onClick={() => {
-                            if(mikelaReserves >= cost) {
+                            if(canAfford) {
                               setMikelaReserves(p => p - cost);
                               setUpgrades(prev => prev.map(item => item.id === u.id ? {...item, level: item.level+1} : item));
                             }
                           }}
-                          disabled={mikelaReserves < cost}
-                          className={`w-full py-5 border-2 font-black text-[12px] uppercase tracking-widest transition-all mt-auto ${mikelaReserves >= cost ? 'border-[#ff00ff] text-[#ff00ff] hover:bg-[#ff00ff] hover:text-black' : 'border-gray-800 text-gray-800 opacity-50'}`}
+                          disabled={!canAfford}
+                          className={`w-full py-6 border-2 font-black text-sm uppercase tracking-[0.3em] transition-all mt-auto flex items-center justify-center gap-3 ${canAfford ? 'border-[#ff00ff] text-[#ff00ff] hover:bg-[#ff00ff] hover:text-black' : 'border-white/10 text-white/10'}`}
                         >
-                          VYLEPŠIT_{cost}_MK
+                          {canAfford ? (
+                            <>VYLEPŠIT | {cost} MK</>
+                          ) : (
+                            <><Lock size={16} /> NEDOSTATEK_DAT</>
+                          )}
                         </button>
                       </div>
                     )
@@ -441,7 +512,7 @@ export const GameView: React.FC = () => {
       </main>
 
       <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #00f3ff; }
         .pixelated { image-rendering: pixelated; }
@@ -449,12 +520,15 @@ export const GameView: React.FC = () => {
           background-image: 
             linear-gradient(to right, #00f3ff 1px, transparent 1px),
             linear-gradient(to bottom, #00f3ff 1px, transparent 1px);
-          background-size: 40px 40px;
-          animation: grid-scroll 20s linear infinite;
+          background-size: 60px 60px;
+          animation: grid-scroll 30s linear infinite;
+        }
+        .bg-radial-vignette {
+          background: radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.8) 100%);
         }
         @keyframes grid-scroll {
           from { background-position: 0 0; }
-          to { background-position: 0 40px; }
+          to { background-position: 0 60px; }
         }
       `}</style>
     </div>
