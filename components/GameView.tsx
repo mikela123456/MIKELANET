@@ -1,6 +1,6 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Sword, Package, Zap, Compass, Truck, Timer, Trophy, Shield, AlertTriangle, ChevronRight, Activity, Clock, Loader2, Coins, X, Terminal, Database, ShieldAlert as AlertIcon, PlayCircle, Lock, ExternalLink, RefreshCw, Eye, Signal, Volume2 } from 'lucide-react';
+// Added missing imports: Truck, RefreshCw, AlertTriangle
+import { User, Compass, Package, Zap, Timer, Trophy, Clock, Coins, X, Terminal, Database, PlayCircle, Lock, Eye, Signal, Loader2, Truck, RefreshCw, AlertTriangle } from 'lucide-react';
 import { AdBanner } from './AdBanner';
 
 type GameTab = 'profile' | 'expeditions' | 'items';
@@ -39,7 +39,6 @@ const AD_WATCH_DURATION = 60;
 
 export const GameView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<GameTab>('profile');
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [mikelaReserves, setMikelaReserves] = useState(150);
   const [reputation, setReputation] = useState(1240);
   const [expeditionLevel, setExpeditionLevel] = useState(1);
@@ -59,11 +58,11 @@ export const GameView: React.FC = () => {
   const [activeAds, setActiveAds] = useState<{id: number}[]>([]);
   const [adsDestroyed, setAdsDestroyed] = useState(0);
   
+  // Video Ad States
   const [videoAdVisible, setVideoAdVisible] = useState(false);
   const [videoAdTimer, setVideoAdTimer] = useState(0);
   const [activeCoinId, setActiveCoinId] = useState<string | null>(null);
   const [isVideoForStart, setIsVideoForStart] = useState(false);
-  const [isAdLoading, setIsAdLoading] = useState(false);
   
   const playerRef = useRef<any>(null);
   const videoElementRef = useRef<HTMLVideoElement>(null);
@@ -76,13 +75,12 @@ export const GameView: React.FC = () => {
     setIsVideoForStart(forStart);
     setVideoAdVisible(true);
     setVideoAdTimer(AD_WATCH_DURATION);
-    setIsAdLoading(true);
   };
 
-  // Fluid Player Logic
+  // Fluid Player Initialization
   useEffect(() => {
-    if (videoAdVisible && window.fluidPlayer && videoElementRef.current) {
-      const initPlayer = () => {
+    if (videoAdVisible && videoElementRef.current && window.fluidPlayer) {
+      const init = () => {
         if (playerRef.current) return;
         
         playerRef.current = window.fluidPlayer(videoElementRef.current, {
@@ -94,29 +92,35 @@ export const GameView: React.FC = () => {
             playbackRateControl: false,
             persistentSettings: { volume: false },
             adProgressbarColor: '#00f3ff',
-            primaryColor: '#ff00ff',
-            controlBar: { autoHide: true, animated: true }
+            primaryColor: '#00f3ff',
+            controlBar: {
+              autoHide: true,
+              animated: true
+            }
           },
           vastOptions: {
             allowVPAID: true,
-            vpaidMode: 'insecure', // Critical for many VPAID providers
-            adList: [{ roll: 'preRoll', vastTag: VIDEO_AD_URL }],
+            vpaidMode: 'insecure',
+            adList: [
+              {
+                roll: 'preRoll',
+                vastTag: VIDEO_AD_URL
+              }
+            ],
             adStartedCallback: () => {
-              setIsAdLoading(false);
-              addLog("Reklamní stream aktivní.", "success");
+              addLog("Reklama spuštěna - Autorizace probíhá.", "info");
             },
-            adErrorCallback: () => {
-              setIsAdLoading(false);
-              addLog("Chyba synchronizace VAST.", "warn");
+            adErrorCallback: (err: any) => {
+              console.error("VAST Load Error:", err);
+              addLog("Chyba načítání reklamy.", "error");
             }
           }
         });
       };
 
-      // Ensure DOM is ready
-      const timeout = setTimeout(initPlayer, 500);
+      const timer = setTimeout(init, 300);
       return () => {
-        clearTimeout(timeout);
+        clearTimeout(timer);
         if (playerRef.current) {
           playerRef.current.destroy();
           playerRef.current = null;
@@ -126,11 +130,13 @@ export const GameView: React.FC = () => {
   }, [videoAdVisible]);
 
   useEffect(() => {
-    let timer: number;
+    let timerId: number;
     if (videoAdVisible && videoAdTimer > 0) {
-      timer = window.setInterval(() => setVideoAdTimer(v => v - 1), 1000);
+      timerId = window.setInterval(() => {
+        setVideoAdTimer(prev => prev - 1);
+      }, 1000);
     }
-    return () => clearInterval(timer);
+    return () => clearInterval(timerId);
   }, [videoAdVisible, videoAdTimer]);
 
   const claimVideoReward = () => {
@@ -142,7 +148,7 @@ export const GameView: React.FC = () => {
       if (coin) {
         setMikelaReserves(prev => prev + coin.value);
         setCoins(prev => prev.filter(c => c.id !== activeCoinId));
-        addLog(`Dekódováno: +${coin.value} MK`, 'success');
+        addLog(`Získáno ${coin.value} MK z datového fragmentu.`, 'success');
       }
       setVideoAdVisible(false);
       setActiveCoinId(null);
@@ -151,7 +157,6 @@ export const GameView: React.FC = () => {
     }
   };
 
-  // Fix: Implemented handleCoinClick which was missing and causing a compilation error.
   const handleCoinClick = (id: string) => {
     setActiveCoinId(id);
     openVideoAd(false);
@@ -224,62 +229,70 @@ export const GameView: React.FC = () => {
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
-      {/* VIDEO AD MODAL - RECONSTRUCTED FOR STABILITY */}
+      {/* VIDEO AD MODAL - PŘESNĚ PODLE SCREENSHOTU */}
       {videoAdVisible && (
-        <div className="fixed inset-0 z-[1000] flex flex-col bg-black">
-          <header className="w-full h-16 bg-[#050505] border-b border-[#00f3ff]/30 flex items-center justify-between px-8 shrink-0">
-            <div className="flex items-center gap-4">
-              <Signal size={18} className="text-[#ff00ff] animate-pulse" />
-              <span className="text-[10px] font-black uppercase tracking-[0.3em]">Node_A77 // Secure_Link</span>
+        <div className="fixed inset-0 z-[1000] flex flex-col bg-black animate-in fade-in duration-300">
+          
+          {/* TOP BAR */}
+          <div className="w-full h-16 bg-black flex items-center justify-between px-6 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-[#ff00ff] shadow-[0_0_8px_#ff00ff]" />
+              <span className="text-[10px] text-[#00f3ff] font-bold tracking-[0.2em] uppercase">
+                UPLINK_ACTIVE // AUTORIZACE STARTU
+              </span>
             </div>
-            <div className="flex items-center gap-6">
-              <div className="text-right">
-                <span className="text-[8px] text-white/30 uppercase block">Synchronizace</span>
-                <span className={`text-xl font-black tabular-nums ${videoAdTimer > 0 ? 'text-[#00f3ff]' : 'text-green-500'}`}>
-                  {videoAdTimer > 0 ? `${videoAdTimer}s` : 'READY'}
-                </span>
-              </div>
-              {videoAdTimer <= 0 && (
-                <button onClick={() => setVideoAdVisible(false)} className="hover:text-white"><X size={20} /></button>
-              )}
+            <div className="flex flex-col items-end">
+              <span className="text-[8px] text-white/40 uppercase tracking-widest leading-none mb-1">Verifikace spojení</span>
+              <span className="text-xl font-black text-[#00f3ff] leading-none tracking-wider neon-glow-cyan tabular-nums">
+                {videoAdTimer > 0 ? `${videoAdTimer}s` : 'DONE'}
+              </span>
             </div>
-          </header>
+          </div>
 
-          <main className="flex-1 relative flex items-center justify-center bg-black overflow-hidden">
-            {isAdLoading && (
-              <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black">
-                <Loader2 className="animate-spin text-[#00f3ff] mb-4" size={40} />
-                <span className="text-[10px] font-black uppercase tracking-widest text-[#00f3ff]/50">Navazuji spojení s HilltopAds...</span>
-              </div>
-            )}
-            {/* Pure Video Element for Fluid Player initialization */}
-            <div className="w-full h-full pointer-events-auto">
-              <video 
-                ref={videoElementRef}
-                id="fluid-ad-player"
-                className="w-full h-full"
-                muted 
-                autoPlay 
-                playsInline 
-                style={{ width: '100%', height: '100%' }}
-              >
-                <source src="" type="video/mp4" />
-              </video>
-            </div>
-          </main>
+          {/* VIDEO CONTAINER */}
+          <div className="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
+             <div className="w-full h-full">
+                <video 
+                  ref={videoElementRef} 
+                  id="ad-video-element"
+                  className="w-full h-full object-contain"
+                  autoPlay
+                  muted
+                  playsInline
+                >
+                  <source src="" type="video/mp4" />
+                </video>
+             </div>
+             
+             {/* Cross Button - Only visible when timer hits zero */}
+             {videoAdTimer <= 0 && (
+               <button 
+                onClick={() => setVideoAdVisible(false)}
+                className="absolute top-4 right-4 z-[1010] w-10 h-10 flex items-center justify-center bg-black/60 border border-white/20 text-white hover:bg-[#ff00ff]/20"
+               >
+                 <X size={24} />
+               </button>
+             )}
+          </div>
 
-          <footer className="w-full h-20 bg-[#050505] border-t border-[#00f3ff]/10 flex items-center justify-center shrink-0">
-            {videoAdTimer > 0 ? (
-              <span className="text-[10px] uppercase font-black text-white/20 tracking-widest">Sledujte pro autorizaci datového přenosu...</span>
-            ) : (
-              <button 
+          {/* BOTTOM BAR */}
+          <div className="w-full h-14 bg-black flex items-center justify-center shrink-0">
+             {videoAdTimer > 0 ? (
+               <div className="flex items-center gap-2 opacity-60">
+                 <RefreshCw size={12} className="text-[#00f3ff] animate-spin" />
+                 <span className="text-[10px] text-[#00f3ff] uppercase tracking-[0.2em]">
+                   Sledujte reklamu pro získání odměny...
+                 </span>
+               </div>
+             ) : (
+               <button 
                 onClick={claimVideoReward}
-                className="px-16 py-3 bg-[#ff00ff] text-black font-black uppercase tracking-[0.4em] hover:bg-white transition-all shadow-[0_0_30px_#ff00ff80]"
-              >
-                Potvrdit příjem
-              </button>
-            )}
-          </footer>
+                className="px-12 py-2 bg-[#00f3ff] text-black font-black uppercase tracking-[0.4em] text-xs hover:bg-white transition-all shadow-[0_0_20px_#00f3ff60]"
+               >
+                 Potvrdit příjem
+               </button>
+             )}
+          </div>
         </div>
       )}
 
@@ -382,7 +395,7 @@ export const GameView: React.FC = () => {
               <div className="space-y-16 animate-in slide-in-from-bottom-12 duration-1000">
                 <div className="flex flex-col lg:flex-row items-center gap-16 p-16 bg-white/[0.02] border border-white/10 rounded">
                   <div className="w-56 h-56 border-2 border-[#00f3ff] p-2 bg-black shadow-[0_0_40px_#00f3ff20]">
-                    {avatarUrl ? <img src={avatarUrl} className="w-full h-full object-cover pixelated" /> : <div className="w-full h-full bg-white/5 flex items-center justify-center"><User size={80} className="text-white/10" /></div>}
+                    <div className="w-full h-full bg-white/5 flex items-center justify-center"><User size={80} className="text-white/10" /></div>
                   </div>
                   <div className="space-y-8 flex-1">
                     <h2 className="text-6xl font-black text-white italic uppercase neon-glow-cyan leading-none">ADMIN_77</h2>
@@ -453,6 +466,8 @@ export const GameView: React.FC = () => {
         .animate-spin-slow { animation: spin 30s linear infinite; }
         @keyframes grid-scroll { from { background-position: 0 0; } to { background-position: 80px 80px; } }
         .neon-glow-cyan { text-shadow: 0 0 10px #00f3ff; }
+        
+        /* Fluid Player Overrides */
         .fluid_video_wrapper {
           width: 100% !important;
           height: 100% !important;
