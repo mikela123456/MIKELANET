@@ -45,7 +45,7 @@ export const GameView: React.FC = () => {
   const [expeditionLevel, setExpeditionLevel] = useState(1);
 
   const [upgrades, setUpgrades] = useState<UpgradeItem[]>([
-    { id: 'atk', name: 'Útočný Protokol', icon: Zap, level: 1, baseCost: 50, desc: 'Zvysuje silu úderu proti bannerům.' },
+    { id: 'atk', name: 'Útočný Protokol', icon: Zap, level: 1, baseCost: 50, desc: 'Zvyšuje sílu úderu proti bannerům.' },
     { id: 'spd', name: 'Tachyonový Pohon', icon: Compass, level: 1, baseCost: 40, desc: 'Zkracuje čas trvání mise.' },
     { id: 'trns', name: 'Datový Uzel', icon: Truck, level: 1, baseCost: 30, desc: 'Efektivnější přenos vytěžených dat.' },
     { id: 'tm', name: 'Forging Modul', icon: Timer, level: 1, baseCost: 60, desc: 'Zvyšuje výnos MIKELA z jedné mise.' },
@@ -63,10 +63,11 @@ export const GameView: React.FC = () => {
   
   // Video Ad / Overview States
   const [videoAdVisible, setVideoAdVisible] = useState(false);
+  const [adStarted, setAdStarted] = useState(false);
   const [activeCoinId, setActiveCoinId] = useState<string | null>(null);
   const [isVideoForStart, setIsVideoForStart] = useState(false);
-  const [adTimeRemaining, setAdTimeRemaining] = useState(15); // Fallback
-  const [maxAdDuration, setMaxAdDuration] = useState(15);
+  const [adTimeRemaining, setAdTimeRemaining] = useState(0);
+  const [maxAdDuration, setMaxAdDuration] = useState(0);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [finalizingTimeLeft, setFinalizingTimeLeft] = useState(3);
   
@@ -123,6 +124,7 @@ export const GameView: React.FC = () => {
 
     setVideoAdVisible(false);
     setIsFinalizing(false);
+    setAdStarted(false);
     if (playerInstance.current) {
       try { playerInstance.current.destroy(); } catch(e) {}
       playerInstance.current = null;
@@ -134,9 +136,10 @@ export const GameView: React.FC = () => {
     setIsVideoForStart(forStart);
     isVideoForStartRef.current = forStart;
     setIsFinalizing(false);
+    setAdStarted(false);
     setFinalizingTimeLeft(3);
-    setAdTimeRemaining(15); 
-    setMaxAdDuration(15);
+    setAdTimeRemaining(0); 
+    setMaxAdDuration(0);
     setVideoAdVisible(true);
   };
 
@@ -145,7 +148,7 @@ export const GameView: React.FC = () => {
     let durationCheckInterval: ReturnType<typeof setInterval>;
 
     if (videoAdVisible && videoRef.current && window.fluidPlayer) {
-      // Initialize Fluid Player - Secure, Locked Mode
+      // Initialize Fluid Player
       playerInstance.current = window.fluidPlayer(videoRef.current, {
         layoutControls: {
           fillToContainer: true,
@@ -155,9 +158,9 @@ export const GameView: React.FC = () => {
           playbackRateControl: false,
           persistentSettings: { volume: false },
           adProgressbarColor: '#00f3ff',
-          playButton: false, // Removed play button
+          playButton: false,
           playPauseAnimation: false,
-          pauseOnClick: false, // User cannot pause
+          pauseOnClick: false,
           controlBar: {
             autoHide: true,
             autoHideTimeout: 0,
@@ -167,7 +170,8 @@ export const GameView: React.FC = () => {
         vastOptions: {
           adList: [{ roll: 'preRoll', vastTag: VIDEO_AD_URL }],
           adStartedCallback: () => {
-            // Detect actual ad duration
+            setAdStarted(true);
+            // Detect duration repeatedly until stable
             durationCheckInterval = setInterval(() => {
               const activeVideo = document.querySelector('.fluid_video_wrapper video') as HTMLVideoElement;
               const target = activeVideo || videoRef.current;
@@ -177,26 +181,22 @@ export const GameView: React.FC = () => {
                 setMaxAdDuration(actualDuration);
                 clearInterval(durationCheckInterval);
               }
-            }, 100);
-            setTimeout(() => clearInterval(durationCheckInterval), 5000);
+            }, 200);
+            setTimeout(() => clearInterval(durationCheckInterval), 10000);
           },
           adFinishedCallback: () => {
-             console.log("Fluid Player: Content Finished.");
+            // Once the ad finishes naturally, start 3s finalize
+            setIsFinalizing(true);
+          },
+          errorCallback: (err: any) => {
+            console.error("Fluid Player Error:", err);
+            // Fallback if ad fails to load: 15s fake transfer
+            setAdStarted(true);
+            setAdTimeRemaining(15);
+            setMaxAdDuration(15);
           }
         }
       });
-
-      // Panel Countdown Synchronization
-      countdownInterval = setInterval(() => {
-        setAdTimeRemaining(prev => {
-          if (prev <= 1) {
-            clearInterval(countdownInterval);
-            setIsFinalizing(true);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
 
       return () => {
         clearInterval(countdownInterval);
@@ -209,7 +209,25 @@ export const GameView: React.FC = () => {
     }
   }, [videoAdVisible]);
 
-  // Data Transfer Finalization Logic (3 seconds)
+  // UI Timer logic: only starts when adStarted is true and duration is known
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval>;
+    if (adStarted && adTimeRemaining > 0 && !isFinalizing) {
+      timer = setInterval(() => {
+        setAdTimeRemaining(prev => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            setIsFinalizing(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [adStarted, adTimeRemaining, isFinalizing]);
+
+  // Final 3s data transfer
   useEffect(() => {
     let finalInterval: ReturnType<typeof setInterval>;
     if (isFinalizing) {
@@ -267,15 +285,6 @@ export const GameView: React.FC = () => {
         return 'EXTRACTING';
       });
 
-      if (Math.random() < 0.05 && coins.length < 2 && currentProgress > 20 && currentProgress < 80) {
-        setCoins(prev => [...prev, {
-          id: Math.random().toString(),
-          x: 20 + Math.random() * 60,
-          y: 25 + Math.random() * 50,
-          value: Math.floor(120 * expeditionLevel * (1 + Math.random() * 0.5))
-        }]);
-      }
-
       if (now >= expeditionEndTime) {
         clearInterval(interval);
         const success = adsDestroyed >= Math.floor(expeditionLevel * 0.7) || Math.random() > 0.4;
@@ -297,18 +306,18 @@ export const GameView: React.FC = () => {
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
-      {/* OVERVIEW VIDEO MODAL - SYSTEM LOCK UI */}
+      {/* OVERVIEW VIDEO MODAL */}
       {videoAdVisible && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/98 backdrop-blur-3xl animate-in fade-in duration-300">
           <div className="w-full max-w-6xl bg-black border-2 border-[#00f3ff]/60 shadow-[0_0_200px_rgba(0,243,255,0.4)] relative overflow-hidden flex flex-col">
             
-            {/* Overview Header - Locked, NO CLOSE BUTTON */}
+            {/* Locked Header */}
             <div className="p-6 border-b border-[#00f3ff]/30 flex justify-between items-center bg-[#050505] z-[1001]">
                <div className="flex items-center gap-5">
                  <LayoutPanelLeft className="text-[#00f3ff] animate-pulse" size={30} />
                  <div className="flex flex-col">
                     <span className="text-[18px] font-black uppercase tracking-[0.6em] neon-glow-cyan">Overview</span>
-                    <span className="text-[10px] text-white/30 uppercase tracking-[0.2em]">Data uplink secure node</span>
+                    <span className="text-[10px] text-white/30 uppercase tracking-[0.2em]">Secure Node Uplink</span>
                  </div>
                </div>
                <div className="flex items-center gap-6 px-4 py-2 border border-red-500/40 bg-red-500/5">
@@ -317,55 +326,66 @@ export const GameView: React.FC = () => {
                </div>
             </div>
 
-            {/* Overview Transfer Panel */}
-            <div className="relative w-full z-[1000] bg-black/95 backdrop-blur-3xl border-b border-[#00f3ff]/20 p-12 flex items-center justify-between shadow-2xl overflow-hidden">
-               <div className="absolute inset-0 pointer-events-none opacity-10">
-                  <div className="w-full h-full bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,#00f3ff_2px,#00f3ff_3px)]" />
-               </div>
-               
-               <div className="flex items-center gap-10 relative">
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-[#ff00ff]/30 blur-3xl animate-ping" />
-                    <Cpu size={64} className="text-[#ff00ff] relative animate-pulse" />
-                  </div>
-                  <div className="flex flex-col">
-                    <h3 className="text-[26px] font-black uppercase tracking-[0.4em] text-white mb-2 italic">
-                       {isFinalizing ? "Finalizing Process..." : "Data transfer is in progress."}
-                    </h3>
+            {/* Overview Transfer Panel - Data transfer process is only prominent when ad is active */}
+            <div className="relative w-full z-[1000] bg-black/95 backdrop-blur-3xl border-b border-[#00f3ff]/20 p-12 flex items-center justify-between shadow-2xl overflow-hidden transition-all duration-700">
+               {!adStarted && !isFinalizing ? (
+                 <div className="flex-1 flex items-center justify-center py-4">
                     <div className="flex items-center gap-4">
-                       <span className="text-[14px] text-[#00f3ff] uppercase tracking-[0.3em] font-black neon-glow-cyan">
-                          {isFinalizing ? "ENCRYPTING_PACKETS" : "TRANSFERRING_UPLINK_DATA"}
-                       </span>
-                       <div className="flex items-center gap-2">
-                          <div className="w-2.5 h-2.5 bg-[#ff00ff] animate-bounce" style={{animationDelay: '0s'}} />
-                          <div className="w-2.5 h-2.5 bg-[#ff00ff] animate-bounce" style={{animationDelay: '0.2s'}} />
-                          <div className="w-2.5 h-2.5 bg-[#ff00ff] animate-bounce" style={{animationDelay: '0.4s'}} />
-                       </div>
+                       <Loader2 className="text-[#00f3ff] animate-spin" size={24} />
+                       <span className="text-[14px] uppercase tracking-[0.4em] font-black text-[#00f3ff]">Navazování spojení s Overview uzlem...</span>
                     </div>
-                  </div>
-               </div>
+                 </div>
+               ) : (
+                 <>
+                   <div className="absolute inset-0 pointer-events-none opacity-10">
+                      <div className="w-full h-full bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,#00f3ff_2px,#00f3ff_3px)]" />
+                   </div>
+                   
+                   <div className="flex items-center gap-10 relative">
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-[#ff00ff]/30 blur-3xl animate-ping" />
+                        <Cpu size={64} className="text-[#ff00ff] relative animate-pulse" />
+                      </div>
+                      <div className="flex flex-col">
+                        <h3 className="text-[26px] font-black uppercase tracking-[0.4em] text-white mb-2 italic">
+                           {isFinalizing ? "Finalizing Process..." : "Data transfer is in progress."}
+                        </h3>
+                        <div className="flex items-center gap-4">
+                           <span className="text-[14px] text-[#00f3ff] uppercase tracking-[0.3em] font-black neon-glow-cyan">
+                              {isFinalizing ? "ENCRYPTING_PACKETS" : "TRANSFERRING_UPLINK_DATA"}
+                           </span>
+                           <div className="flex items-center gap-2">
+                              <div className="w-2.5 h-2.5 bg-[#ff00ff] animate-bounce" style={{animationDelay: '0s'}} />
+                              <div className="w-2.5 h-2.5 bg-[#ff00ff] animate-bounce" style={{animationDelay: '0.2s'}} />
+                              <div className="w-2.5 h-2.5 bg-[#ff00ff] animate-bounce" style={{animationDelay: '0.4s'}} />
+                           </div>
+                        </div>
+                      </div>
+                   </div>
 
-               <div className="flex items-center gap-14 relative">
-                  <div className="text-right">
-                    <span className="text-[14px] text-white/40 uppercase font-black block mb-5 tracking-[0.2em]">
-                        {isFinalizing ? "STABILIZING_CONNECTION" : "TIME_TO_COMPLETE_T_MINUS"}
-                    </span>
-                    <div className="flex items-center gap-10">
-                       <span className="text-7xl font-black text-[#ff00ff] tabular-nums tracking-widest drop-shadow-[0_0_30px_#ff00ff] italic">
-                          {isFinalizing ? finalizingTimeLeft : adTimeRemaining}<span className="text-sm ml-2 opacity-50 uppercase non-italic">sec</span>
-                       </span>
-                       <div className="w-[450px] h-10 bg-white/5 border-2 border-white/20 rounded-sm overflow-hidden p-[8px] shadow-[inset_0_0_20px_rgba(0,0,0,1)]">
-                          <div 
-                            className={`h-full bg-gradient-to-r from-[#00f3ff] via-[#ff00ff] to-[#00f3ff] shadow-[0_0_40px_#00f3ff] transition-all duration-1000 ease-linear ${isFinalizing ? 'animate-pulse' : ''}`}
-                            style={{ width: isFinalizing ? `${(finalizingTimeLeft / 3) * 100}%` : `${(adTimeRemaining / maxAdDuration) * 100}%` }}
-                          />
-                       </div>
-                    </div>
-                  </div>
-               </div>
+                   <div className="flex items-center gap-14 relative">
+                      <div className="text-right">
+                        <span className="text-[14px] text-white/40 uppercase font-black block mb-5 tracking-[0.2em]">
+                            {isFinalizing ? "STABILIZING_CONNECTION" : "TIME_TO_COMPLETE_T_MINUS"}
+                        </span>
+                        <div className="flex items-center gap-10">
+                           <span className="text-7xl font-black text-[#ff00ff] tabular-nums tracking-widest drop-shadow-[0_0_30px_#ff00ff] italic">
+                              {isFinalizing ? finalizingTimeLeft : adTimeRemaining}<span className="text-sm ml-2 opacity-50 uppercase non-italic">sec</span>
+                           </span>
+                           <div className="w-[450px] h-10 bg-white/5 border-2 border-white/20 rounded-sm overflow-hidden p-[8px] shadow-[inset_0_0_20px_rgba(0,0,0,1)]">
+                              <div 
+                                className={`h-full bg-gradient-to-r from-[#00f3ff] via-[#ff00ff] to-[#00f3ff] shadow-[0_0_40px_#00f3ff] transition-all duration-1000 ease-linear ${isFinalizing ? 'animate-pulse' : ''}`}
+                                style={{ width: isFinalizing ? `${(finalizingTimeLeft / 3) * 100}%` : `${(adTimeRemaining / maxAdDuration) * 100}%` }}
+                              />
+                           </div>
+                        </div>
+                      </div>
+                   </div>
+                 </>
+               )}
             </div>
 
-            {/* Locked Content Player */}
+            {/* Content Area */}
             <div className="aspect-video bg-black relative flex flex-col items-center justify-center overflow-hidden z-0 shadow-[inset_0_0_200px_rgba(0,0,0,1)]">
                <div className="w-full h-full relative pointer-events-none">
                   <video ref={videoRef} id="video-ad-player" className="w-full h-full object-cover">
@@ -384,7 +404,6 @@ export const GameView: React.FC = () => {
                )}
             </div>
 
-            {/* Overview Footer */}
             <div className="p-8 bg-[#050505] flex justify-between items-center border-t border-white/10 px-16">
                <div className="flex items-center gap-16 opacity-60">
                   <div className="flex flex-col">
@@ -398,8 +417,10 @@ export const GameView: React.FC = () => {
                </div>
                <div className="flex items-center gap-8">
                   <div className="flex flex-col items-end">
-                    <span className="text-[10px] uppercase tracking-widest text-white/40 font-bold">NETWORK</span>
-                    <span className="text-[14px] text-[#00f3ff] font-black uppercase tracking-widest">3S_UPLINK_DELAY_ACTIVE</span>
+                    <span className="text-[10px] uppercase tracking-widest text-white/40 font-bold">STATUS</span>
+                    <span className="text-[14px] text-[#00f3ff] font-black uppercase tracking-widest">
+                       {adStarted ? "3S_UPLINK_DELAY_READY" : "WAITING_FOR_AD_SYNC"}
+                    </span>
                   </div>
                   <Signal size={32} className="text-[#00f3ff] animate-pulse" />
                </div>
@@ -466,13 +487,11 @@ export const GameView: React.FC = () => {
               </div>
             </div>
 
-            {/* Tactical View */}
             <div className="flex-1 flex overflow-hidden">
               <div className="flex-1 relative bg-[#010101] overflow-hidden">
                 <div className="absolute inset-0 tactical-grid opacity-[0.15]" />
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_20%,rgba(0,0,0,0.95)_100%)] pointer-events-none" />
                 
-                {/* Ads Layer */}
                 <div className="absolute inset-0 z-30 pointer-events-none p-20 flex flex-col items-center gap-12">
                   {activeAds.map(ad => (
                     <div key={ad.id} className="pointer-events-auto shadow-[0_0_60px_rgba(0,0,0,1)] animate-in fade-in slide-in-from-top-12 duration-700 hover:scale-105 transition-transform">
@@ -481,7 +500,6 @@ export const GameView: React.FC = () => {
                   ))}
                 </div>
 
-                {/* Coins/Data Layer */}
                 <div className="absolute inset-0 z-20 pointer-events-none">
                   {coins.map(coin => (
                     <button 
@@ -504,7 +522,6 @@ export const GameView: React.FC = () => {
                   ))}
                 </div>
 
-                {/* Status HUD Overlays */}
                 {phase === 'COMPLETED' && (
                   <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/98 backdrop-blur-2xl animate-in fade-in zoom-in duration-700">
                     <div className="text-center p-24 border-2 border-[#00f3ff] bg-black/60 shadow-[0_0_150px_rgba(0,243,255,0.4)] max-w-3xl border-dashed">
@@ -520,7 +537,6 @@ export const GameView: React.FC = () => {
                 )}
               </div>
 
-              {/* Terminal sidebar */}
               <div className="w-80 border-l border-white/5 bg-[#020202] flex flex-col shadow-[-30px_0_60px_rgba(0,0,0,0.8)] z-10">
                 <div className="p-8 border-b border-white/10 flex items-center justify-between bg-black/60">
                   <div className="flex items-center gap-4">
