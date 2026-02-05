@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Sword, Package, Zap, Compass, Truck, Timer, Trophy, Shield, AlertTriangle, ChevronRight, Activity, Clock, Loader2, Coins, X, Terminal, Database, ShieldAlert as AlertIcon, PlayCircle, Lock, ExternalLink, RefreshCw, Eye, Signal, Volume2, HardDrive, Cpu, LayoutPanelLeft, Share2, Radio } from 'lucide-react';
+import { User, Sword, Package, Zap, Compass, Truck, Timer, Trophy, Shield, AlertTriangle, ChevronRight, Activity, Clock, Loader2, Coins, X, Terminal, Database, ShieldAlert as AlertIcon, PlayCircle, Lock, ExternalLink, RefreshCw, Eye, Signal, Volume2, HardDrive, Cpu, LayoutPanelLeft, Share2, Radio, Play } from 'lucide-react';
 import { AdBanner } from './AdBanner';
 
 type GameTab = 'profile' | 'expeditions' | 'items';
@@ -29,7 +29,7 @@ interface GameCoin {
 }
 
 declare global {
-  interface Window {
+  interface window {
     fluidPlayer: any;
   }
 }
@@ -37,6 +37,7 @@ declare global {
 const VIDEO_AD_URL = "https://groundedmine.com/d.mTFSzgdpGDNYvcZcGXUK/FeJm/9IuZZNUElDktPwTaYW3CNUz/YTwMNFD/ket-N/j_c/3qN/jPA/1cMuwy";
 
 export const GameView: React.FC = () => {
+  // Fix: Corrected useState syntax for generic type parameter and initial value
   const [activeTab, setActiveTab] = useState<GameTab>('profile');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   
@@ -61,17 +62,16 @@ export const GameView: React.FC = () => {
   const [activeAds, setActiveAds] = useState<{id: number}[]>([]);
   const [adsDestroyed, setAdsDestroyed] = useState(0);
   
-  // Video Ad / Overview States
+  // Video Ad Core States
   const [videoAdVisible, setVideoAdVisible] = useState(false);
   const [adStarted, setAdStarted] = useState(false);
   const [showManualStart, setShowManualStart] = useState(false);
-  const [activeCoinId, setActiveCoinId] = useState<string | null>(null);
-  const [isVideoForStart, setIsVideoForStart] = useState(false);
-  const [adTimeRemaining, setAdTimeRemaining] = useState(0);
-  const [maxAdDuration, setMaxAdDuration] = useState(0);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [finalizingTimeLeft, setFinalizingTimeLeft] = useState(3);
   
+  const [activeCoinId, setActiveCoinId] = useState<string | null>(null);
+  const [isVideoForStart, setIsVideoForStart] = useState(false);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerInstance = useRef<any>(null);
   const adFinishedRef = useRef(false);
@@ -116,7 +116,7 @@ export const GameView: React.FC = () => {
         const coin = prev.find(c => c.id === coinId);
         if (coin) {
           setMikelaReserves(m => m + coin.value);
-          addLog(`Overview: Data úspěšně přenesena (+${coin.value} MK)`, 'success');
+          addLog(`Systém: Data úspěšně extrahována (+${coin.value} MK)`, 'success');
         }
         return prev.filter(c => c.id !== coinId);
       });
@@ -141,22 +141,21 @@ export const GameView: React.FC = () => {
     setAdStarted(false);
     setShowManualStart(false);
     setFinalizingTimeLeft(3);
-    setAdTimeRemaining(0); 
-    setMaxAdDuration(0);
     setVideoAdVisible(true);
   };
 
   useEffect(() => {
-    let durationCheckInterval: ReturnType<typeof setInterval>;
     let initialTimeout: ReturnType<typeof setTimeout>;
 
     if (videoAdVisible && videoRef.current) {
+      // @ts-ignore
       if (!window.fluidPlayer) {
-        console.error("Fluid Player not loaded.");
+        console.error("Fluid Player scripts are missing from index.html");
         return;
       }
 
-      // Initialize Player
+      // Initialize Fluid Player
+      // @ts-ignore
       playerInstance.current = window.fluidPlayer(videoRef.current, {
         layoutControls: {
           fillToContainer: true,
@@ -179,40 +178,29 @@ export const GameView: React.FC = () => {
           adList: [{ roll: 'preRoll', vastTag: VIDEO_AD_URL }],
           allowVPAID: true,
           adStartedCallback: () => {
-            console.log("Fluid Player: Broadcast Started.");
+            console.log("AD_STATUS: Started");
             setAdStarted(true);
             setShowManualStart(false);
-            
-            durationCheckInterval = setInterval(() => {
-              const activeVideo = document.querySelector('.fluid_video_wrapper video') as HTMLVideoElement;
-              const target = activeVideo || videoRef.current;
-              if (target && target.duration && target.duration > 0 && target.duration !== Infinity) {
-                const actualDuration = Math.ceil(target.duration);
-                setAdTimeRemaining(actualDuration);
-                setMaxAdDuration(actualDuration);
-                clearInterval(durationCheckInterval);
-              }
-            }, 500);
           },
           adFinishedCallback: () => {
+            console.log("AD_STATUS: Finished -> Starting 3s inactivity window");
             setIsFinalizing(true);
           },
           errorCallback: (err: any) => {
-            console.warn("Fluid Player: Data Link Blocked.", err);
+            console.warn("AD_STATUS: Blocked/Error", err);
             setShowManualStart(true);
           }
         }
       });
 
-      // If ad doesn't start in 1.5s, show manual start button to satisfy Autoplay requirements
+      // If nothing happens within 2s, show the manual start button
       initialTimeout = setTimeout(() => {
-        if (!adStarted) {
+        if (!adStarted && !isFinalizing) {
           setShowManualStart(true);
         }
-      }, 1500);
+      }, 2000);
 
       return () => {
-        if (durationCheckInterval) clearInterval(durationCheckInterval);
         if (initialTimeout) clearTimeout(initialTimeout);
         if (playerInstance.current) {
           try { playerInstance.current.destroy(); } catch(e) {}
@@ -220,38 +208,23 @@ export const GameView: React.FC = () => {
         }
       };
     }
-  }, [videoAdVisible, adStarted]);
+  }, [videoAdVisible]);
 
   const forceStartAd = () => {
     if (playerInstance.current) {
-      // Fluid player usually needs a direct interaction to play if autoplay failed
-      const videoElement = document.querySelector('.fluid_video_wrapper video') as HTMLVideoElement;
-      if (videoElement) {
-        videoElement.play().catch(e => console.error("Play failed:", e));
+      const v = document.querySelector('.fluid_video_wrapper video') as HTMLVideoElement;
+      if (v) {
+        v.play().catch(e => {
+          console.error("Play gesture failed", e);
+          // Fallback if browser is extremely restrictive
+          setIsFinalizing(true);
+        });
       }
       setShowManualStart(false);
     }
   };
 
-  // UI countdown logic
-  useEffect(() => {
-    let timer: ReturnType<typeof setInterval>;
-    if (adStarted && adTimeRemaining > 0 && !isFinalizing) {
-      timer = setInterval(() => {
-        setAdTimeRemaining(prev => {
-          if (prev <= 1) {
-            clearInterval(timer);
-            setIsFinalizing(true);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => clearInterval(timer);
-  }, [adStarted, adTimeRemaining, isFinalizing]);
-
-  // Final 3-second data sync
+  // 3-second delay after ad finishes (Primary Recognition)
   useEffect(() => {
     let finalInterval: ReturnType<typeof setInterval>;
     if (isFinalizing) {
@@ -330,152 +303,93 @@ export const GameView: React.FC = () => {
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
-      {/* OVERVIEW VIDEO MODAL - HARD LOCKED UI */}
+      {/* VIDEO AD MODAL */}
       {videoAdVisible && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/98 backdrop-blur-3xl animate-in fade-in duration-300">
-          <div className="w-full max-w-6xl bg-black border-2 border-[#00f3ff]/60 shadow-[0_0_200px_rgba(0,243,255,0.4)] relative overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black animate-in fade-in duration-300">
+          <div className="w-full h-full md:w-full md:h-full lg:max-w-6xl lg:max-h-[85vh] bg-black border-2 border-[#00f3ff]/40 shadow-[0_0_80px_rgba(0,243,255,0.3)] flex flex-col relative overflow-hidden">
             
-            {/* Locked Header */}
-            <div className="p-6 border-b border-[#00f3ff]/30 flex justify-between items-center bg-[#050505] z-[1001]">
-               <div className="flex items-center gap-5">
-                 <Radio className="text-[#00f3ff] animate-pulse" size={30} />
+            {/* Modal Header */}
+            <div className="p-5 border-b border-[#00f3ff]/20 bg-[#050505] flex justify-between items-center shrink-0">
+               <div className="flex items-center gap-4">
+                 <Radio className="text-[#00f3ff] animate-pulse" size={24} />
                  <div className="flex flex-col">
-                    <span className="text-[18px] font-black uppercase tracking-[0.6em] neon-glow-cyan">Overview</span>
-                    <span className="text-[10px] text-white/30 uppercase tracking-[0.2em]">Hardware Secure Uplink</span>
+                    <span className="text-sm font-black uppercase tracking-[0.4em] neon-glow-cyan">System Uplink</span>
+                    <span className="text-[9px] text-white/30 uppercase tracking-[0.2em]">Authenticating Stream Node</span>
                  </div>
                </div>
-               <div className="flex items-center gap-6 px-4 py-2 border border-red-500/40 bg-red-500/5">
-                  <Lock size={20} className="text-red-500 animate-pulse" />
-                  <span className="text-[12px] font-black text-red-500 uppercase tracking-widest">System Locked</span>
+               <div className="flex items-center gap-3 px-4 py-1.5 border border-red-500/30 bg-red-500/5">
+                  <Lock size={14} className="text-red-500 animate-pulse" />
+                  <span className="text-[10px] font-black text-red-500 uppercase tracking-widest">LOCKED_SESSION</span>
                </div>
             </div>
 
-            {/* Overview Transfer Panel */}
-            <div className="relative w-full z-[1000] bg-black/95 backdrop-blur-3xl border-b border-[#00f3ff]/20 p-12 flex items-center justify-between shadow-2xl overflow-hidden min-h-[160px]">
-               {!adStarted && !isFinalizing ? (
-                 <div className="flex-1 flex flex-col items-center justify-center gap-6 py-6">
-                    <div className="flex items-center gap-5">
-                       <Loader2 className="text-[#00f3ff] animate-spin" size={32} />
-                       <span className="text-[18px] uppercase tracking-[0.5em] font-black text-[#00f3ff]">Signal Acquisition...</span>
-                    </div>
-                    <span className="text-[10px] text-white/20 uppercase tracking-[0.3em]">Handshaking with broadcast node 0x7F</span>
-                 </div>
-               ) : (
-                 <>
-                   <div className="absolute inset-0 pointer-events-none opacity-10">
-                      <div className="w-full h-full bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,#00f3ff_2px,#00f3ff_3px)]" />
-                   </div>
-                   
-                   <div className="flex items-center gap-10 relative">
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-[#ff00ff]/30 blur-3xl animate-ping" />
-                        <Cpu size={64} className="text-[#ff00ff] relative animate-pulse" />
-                      </div>
-                      <div className="flex flex-col">
-                        <h3 className="text-[26px] font-black uppercase tracking-[0.4em] text-white mb-2 italic">
-                           {isFinalizing ? "Finalizing Sync..." : "Broadcasting Overview data."}
-                        </h3>
-                        <div className="flex items-center gap-4">
-                           <span className="text-[14px] text-[#00f3ff] uppercase tracking-[0.3em] font-black neon-glow-cyan">
-                              {isFinalizing ? "ENCRYPTING_SECURE_UPLINK" : "UPLINK_STREAM_STABLE"}
-                           </span>
-                           <div className="flex items-center gap-2">
-                              <div className="w-2.5 h-2.5 bg-[#ff00ff] animate-bounce" style={{animationDelay: '0s'}} />
-                              <div className="w-2.5 h-2.5 bg-[#ff00ff] animate-bounce" style={{animationDelay: '0.2s'}} />
-                              <div className="w-2.5 h-2.5 bg-[#ff00ff] animate-bounce" style={{animationDelay: '0.4s'}} />
-                           </div>
-                        </div>
-                      </div>
-                   </div>
-
-                   <div className="flex items-center gap-14 relative">
-                      <div className="text-right">
-                        <span className="text-[14px] text-white/40 uppercase font-black block mb-5 tracking-[0.2em]">
-                            {isFinalizing ? "PROCESS_COMPLETION" : "STREAM_END_T_MINUS"}
-                        </span>
-                        <div className="flex items-center gap-10">
-                           <span className="text-7xl font-black text-[#ff00ff] tabular-nums tracking-widest drop-shadow-[0_0_30px_#ff00ff] italic">
-                              {isFinalizing ? finalizingTimeLeft : adTimeRemaining}<span className="text-sm ml-2 opacity-50 uppercase non-italic">sec</span>
-                           </span>
-                           <div className="w-[450px] h-10 bg-white/5 border-2 border-white/20 rounded-sm overflow-hidden p-[8px] shadow-[inset_0_0_20px_rgba(0,0,0,1)]">
-                              <div 
-                                className={`h-full bg-gradient-to-r from-[#00f3ff] via-[#ff00ff] to-[#00f3ff] shadow-[0_0_40px_#00f3ff] transition-all duration-1000 ease-linear ${isFinalizing ? 'animate-pulse' : ''}`}
-                                style={{ width: isFinalizing ? `${(finalizingTimeLeft / 3) * 100}%` : `${(adTimeRemaining / (maxAdDuration || 1)) * 100}%` }}
-                              />
-                           </div>
-                        </div>
-                      </div>
-                   </div>
-                 </>
-               )}
-            </div>
-
-            {/* Video Player Core */}
-            <div className="aspect-video bg-black relative flex flex-col items-center justify-center overflow-hidden z-0 shadow-[inset_0_0_200px_rgba(0,0,0,1)]">
-               <div className="w-full h-full relative">
+            {/* Main Content Area - Player Only */}
+            <div className="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
+               {/* Player Container - Must be interactive */}
+               <div className="w-full h-full relative" id="fluid-wrapper">
                   <video 
                     ref={videoRef} 
                     id="video-ad-player" 
-                    className="w-full h-full object-cover" 
+                    className="w-full h-full" 
                     muted 
                     playsInline 
                     autoPlay
                   >
                     <source src="" type="video/mp4" />
                   </video>
-                  <div className="absolute inset-0 pointer-events-none z-10 opacity-10 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[size:100%_2px,3px_100%]" />
+                  
+                  {/* Subtle Scanlines overlay */}
+                  <div className="absolute inset-0 pointer-events-none z-10 opacity-5 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[size:100%_2px,3px_100%]" />
                </div>
-               
-               {showManualStart && !adStarted && (
-                 <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/80 backdrop-blur-md">
+
+               {/* Manual Initialization Overlay */}
+               {showManualStart && !adStarted && !isFinalizing && (
+                 <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-xl">
                     <button 
                       onClick={forceStartAd}
-                      className="group flex flex-col items-center gap-6 p-12 border-4 border-[#00f3ff] bg-black shadow-[0_0_60px_rgba(0,243,255,0.5)] animate-in zoom-in duration-300"
+                      className="group flex flex-col items-center gap-8 p-12 border-4 border-[#00f3ff] bg-black shadow-[0_0_50px_rgba(0,243,255,0.6)] animate-in zoom-in duration-300"
                     >
-                       <PlayCircle size={80} className="text-[#00f3ff] group-hover:scale-110 transition-transform" />
+                       <Play size={80} className="text-[#00f3ff] fill-[#00f3ff]/20 group-hover:scale-110 transition-transform duration-500" />
                        <div className="text-center">
-                          <span className="text-2xl font-black text-[#00f3ff] uppercase tracking-[0.5em] block mb-2">Initialize Uplink</span>
-                          <span className="text-[10px] text-white/40 uppercase tracking-[0.2em]">Connection requires manual authorization</span>
+                          <span className="text-3xl font-black text-[#00f3ff] uppercase tracking-[0.6em] block mb-3 italic">Initialize Uplink</span>
+                          <span className="text-[10px] text-white/40 uppercase tracking-[0.3em]">User interaction required to bypass kernel restriction</span>
                        </div>
                     </button>
                  </div>
                )}
 
+               {/* Post-Ad Inactivity Window (3s Finalization) */}
                {isFinalizing && (
-                  <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 backdrop-blur-xl">
+                  <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/95 backdrop-blur-3xl border-2 border-[#00f3ff]">
                      <div className="flex flex-col items-center gap-10 animate-in zoom-in duration-500">
-                        <Loader2 className="text-[#00f3ff] animate-spin" size={120} />
-                        <div className="flex flex-col items-center">
-                           <span className="text-4xl font-black uppercase tracking-[1em] neon-glow-cyan translate-x-[0.5em] mb-4">Finalizing</span>
-                           <span className="text-xs text-white/40 uppercase tracking-[0.5em] font-bold">Synchronizing metadata and rewards...</span>
+                        <div className="relative">
+                           <Loader2 className="text-[#00f3ff] animate-spin" size={100} />
+                           <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="text-2xl font-black text-white">{finalizingTimeLeft}</span>
+                           </div>
+                        </div>
+                        <div className="text-center space-y-4">
+                           <span className="text-4xl font-black uppercase tracking-[1em] neon-glow-cyan block">Finalizing Sync</span>
+                           <span className="text-[11px] text-white/40 uppercase tracking-[0.5em] font-bold block animate-pulse">Closing broadcast link in T-minus {finalizingTimeLeft} seconds...</span>
                         </div>
                      </div>
                   </div>
                )}
             </div>
 
-            {/* Overview Footer */}
-            <div className="p-8 bg-[#050505] flex justify-between items-center border-t border-white/10 px-16">
-               <div className="flex items-center gap-16 opacity-60">
+            {/* Modal Footer */}
+            <div className="p-5 bg-[#050505] border-t border-[#00f3ff]/10 flex items-center justify-between shrink-0">
+               <div className="flex items-center gap-10">
                   <div className="flex flex-col">
-                    <span className="text-[10px] uppercase tracking-widest text-white/60 font-bold">PROTOCOL</span>
-                    <span className="text-[14px] uppercase tracking-[0.2em] font-black text-[#00f3ff]">VAST_VPAID_0x9A</span>
-                  </div>
-                  <div className="flex flex-col border-l border-white/20 pl-10">
-                    <span className="text-[10px] uppercase tracking-widest text-white/60 font-bold">SYNC_STATE</span>
-                    <span className={`text-[14px] uppercase tracking-[0.2em] font-black ${adStarted ? 'text-green-500' : 'text-[#ff00ff]'}`}>
-                       {adStarted ? 'LOCKED_ON_STREAM' : 'WAITING_FOR_DATA'}
+                    <span className="text-[8px] text-white/30 uppercase font-black tracking-widest mb-1">Signal Status</span>
+                    <span className={`text-[12px] font-black uppercase tracking-widest ${adStarted ? 'text-green-500' : 'text-[#ff00ff]'}`}>
+                       {adStarted ? 'Linked & Stable' : 'Searching for Signal'}
                     </span>
                   </div>
                </div>
-               <div className="flex items-center gap-8">
-                  <div className="flex flex-col items-end">
-                    <span className="text-[10px] uppercase tracking-widest text-white/40 font-bold">INTEGRITY</span>
-                    <span className="text-[14px] text-[#00f3ff] font-black uppercase tracking-widest italic">
-                       {isFinalizing ? "SYNCING_NODE_0x7F" : "BROADCASTING_ACTIVE"}
-                    </span>
-                  </div>
-                  <Signal size={36} className="text-[#00f3ff] animate-pulse" />
+               <div className="flex items-center gap-4 opacity-40">
+                  <Signal size={24} className="animate-pulse" />
+                  <span className="text-[9px] uppercase font-black tracking-[0.4em]">VAST_Node_0x7F</span>
                </div>
             </div>
           </div>
