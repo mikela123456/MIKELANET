@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, Sword, Package, Zap, Compass, Truck, Timer, Trophy, RefreshCw, Shield, AlertTriangle, Cpu, ChevronRight, Activity, Clock } from 'lucide-react';
+import { User, Sword, Package, Zap, Compass, Truck, Timer, Trophy, RefreshCw, Shield, AlertTriangle, Cpu, ChevronRight, Activity, Clock, Loader2 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { AdBanner } from './AdBanner';
 
@@ -17,6 +17,7 @@ interface UpgradeItem {
   id: string;
   name: string;
   icon: any;
+  imgUrl?: string;
   level: number;
   baseCost: number;
   desc: string;
@@ -26,6 +27,7 @@ export const GameView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<GameTab>('profile');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingItems, setIsGeneratingItems] = useState(false);
   
   // Player Stats
   const [mikelaReserves, setMikelaReserves] = useState(0);
@@ -65,6 +67,73 @@ export const GameView: React.FC = () => {
   const addLog = (text: string, type: 'info' | 'warn' | 'success' | 'error' = 'info') => {
     setLogs(prev => [{ id: Math.random().toString(), text, type }, ...prev].slice(0, 10));
   };
+
+  const generateAvatar = async () => {
+    setIsGenerating(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: {
+          parts: [{ text: 'Cyberpunk pixel art portrait of a digital hacker, neon cyan and magenta palette, glitch art style, headshot, square aspect ratio, 8-bit aesthetic' }]
+        },
+        config: {
+          imageConfig: { aspectRatio: "1:1" }
+        }
+      });
+      
+      const part = response.candidates?.[0]?.content?.parts.find(p => p.inlineData);
+      if (part?.inlineData) {
+        setAvatarUrl(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
+      }
+    } catch (e) {
+      console.error("Avatar generation failed:", e);
+      // Fallback
+      setAvatarUrl(`https://api.dicebear.com/7.x/pixel-art/svg?seed=${Math.random()}`);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const generateItemIcons = async () => {
+    if (isGeneratingItems) return;
+    setIsGeneratingItems(true);
+    
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    const newUpgrades = await Promise.all(upgrades.map(async (item) => {
+      if (item.imgUrl) return item; // Skip already generated
+      
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash-image',
+          contents: {
+            parts: [{ text: `Pixel art icon for a cyberpunk game item: ${item.name}. Style: neon glitch, dark background, 8-bit console icon, detailed pixel work.` }]
+          },
+          config: {
+            imageConfig: { aspectRatio: "1:1" }
+          }
+        });
+        
+        const part = response.candidates?.[0]?.content?.parts.find(p => p.inlineData);
+        if (part?.inlineData) {
+          return { ...item, imgUrl: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` };
+        }
+      } catch (e) {
+        console.error(`Failed to generate icon for ${item.name}`, e);
+      }
+      return item;
+    }));
+    
+    setUpgrades(newUpgrades);
+    setIsGeneratingItems(false);
+  };
+
+  useEffect(() => {
+    if (activeTab === 'items' && upgrades.some(u => !u.imgUrl)) {
+      generateItemIcons();
+    }
+  }, [activeTab]);
 
   const startExpedition = () => {
     const baseDuration = calculateTotalDuration(expeditionLevel);
@@ -107,22 +176,6 @@ export const GameView: React.FC = () => {
       }
       return item;
     }));
-  };
-
-  const generateAvatar = async () => {
-    setIsGenerating(true);
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: 'Cyberpunk pixel art portrait, neon glitch aesthetic.',
-      });
-      setAvatarUrl(`https://api.dicebear.com/7.x/pixel-art/svg?seed=${Math.random()}`);
-    } catch (e) {
-      setAvatarUrl(`https://api.dicebear.com/7.x/pixel-art/svg?seed=fallback`);
-    } finally {
-      setIsGenerating(false);
-    }
   };
 
   useEffect(() => {
@@ -216,7 +269,7 @@ export const GameView: React.FC = () => {
             </header>
 
             <div className="flex-1 min-h-[500px] relative bg-[#020202] border-2 border-white/5 overflow-hidden flex flex-col shadow-[inset_0_0_120px_rgba(0,0,0,1)]">
-              {/* Reklamy Layer - Vycentrováno pro striktní 320x50 */}
+              {/* Reklamy Layer */}
               <div className="absolute inset-x-0 top-0 h-1/2 z-30 p-6 flex flex-col items-center justify-center gap-4 pointer-events-none">
                 <div className="pointer-events-auto flex flex-col gap-4">
                   {activeAds.map(ad => (
@@ -281,8 +334,19 @@ export const GameView: React.FC = () => {
           <div className="max-w-4xl mx-auto py-10 px-6 flex flex-col gap-10">
             {activeTab === 'profile' && (
               <div className="p-10 border border-[#00f3ff]/30 bg-black/60 flex flex-col md:flex-row items-center gap-10">
-                <div className="w-32 h-32 border-2 border-[#ff00ff] p-1.5 bg-black">
-                  {avatarUrl ? <img src={avatarUrl} className="w-full h-full object-cover pixelated" /> : <div className="w-full h-full bg-white/5 flex items-center justify-center"><User size={48} /></div>}
+                <div className="relative w-32 h-32 border-2 border-[#ff00ff] p-1.5 bg-black overflow-hidden">
+                  {isGenerating && (
+                    <div className="absolute inset-0 z-10 bg-black/80 flex items-center justify-center">
+                      <Loader2 className="text-[#00f3ff] animate-spin" size={24} />
+                    </div>
+                  )}
+                  {avatarUrl ? (
+                    <img src={avatarUrl} className="w-full h-full object-cover pixelated" />
+                  ) : (
+                    <div className="w-full h-full bg-white/5 flex items-center justify-center">
+                      <User size={48} className="text-[#00f3ff]/20" />
+                    </div>
+                  )}
                 </div>
                 <div className="flex-1 text-center md:text-left">
                   <h2 className="text-4xl font-black text-white italic uppercase tracking-tighter">ADMIN_77</h2>
@@ -296,7 +360,13 @@ export const GameView: React.FC = () => {
                       <p className="text-xl font-black text-white">{reputation}</p>
                     </div>
                   </div>
-                  <button onClick={generateAvatar} className="mt-6 text-[10px] text-[#ff00ff] uppercase font-bold hover:underline">Re-Sync Avatar</button>
+                  <button 
+                    onClick={generateAvatar} 
+                    disabled={isGenerating}
+                    className="mt-6 text-[10px] text-[#ff00ff] uppercase font-bold hover:underline disabled:opacity-30 flex items-center gap-2"
+                  >
+                    {isGenerating ? 'Generování...' : 'Re-Sync Avatar'}
+                  </button>
                 </div>
               </div>
             )}
@@ -312,13 +382,27 @@ export const GameView: React.FC = () => {
             )}
 
             {activeTab === 'items' && (
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative">
+                  {isGeneratingItems && (
+                    <div className="absolute -top-10 right-0 flex items-center gap-2 text-[#00f3ff] animate-pulse">
+                      <Loader2 className="animate-spin" size={14} />
+                      <span className="text-[10px] uppercase font-black">Generování arzenálu...</span>
+                    </div>
+                  )}
                   {upgrades.map(u => {
                     const cost = Math.floor(u.baseCost * Math.pow(1.65, u.level - 1));
                     return (
-                      <div key={u.id} className="p-8 border border-white/10 bg-black/60 flex flex-col min-h-[200px]">
-                        <div className="flex justify-between items-center mb-6">
-                          <u.icon className="text-[#ff00ff]" size={32} />
+                      <div key={u.id} className="p-8 border border-white/10 bg-black/60 flex flex-col min-h-[200px] hover:border-[#ff00ff]/40 transition-colors">
+                        <div className="flex justify-between items-start mb-6">
+                          <div className="w-20 h-20 border border-[#ff00ff]/30 bg-black p-1">
+                            {u.imgUrl ? (
+                              <img src={u.imgUrl} className="w-full h-full object-cover pixelated" alt={u.name} />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-white/5">
+                                <u.icon className="text-[#ff00ff]/30" size={32} />
+                              </div>
+                            )}
+                          </div>
                           <span className="text-[#ff00ff] font-black italic text-2xl">LV_{u.level}</span>
                         </div>
                         <h4 className="text-white font-black uppercase text-sm mb-2">{u.name}</h4>
