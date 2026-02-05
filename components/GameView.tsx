@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { User, Sword, Package, Zap, Compass, Truck, Timer, Trophy, RefreshCw, Shield, AlertTriangle, Cpu, ChevronRight, Activity, Clock, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { User, Sword, Package, Zap, Compass, Truck, Timer, Trophy, RefreshCw, Shield, AlertTriangle, Cpu, ChevronRight, Activity, Clock, Loader2, Coins, ExternalLink, X } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { AdBanner } from './AdBanner';
 
@@ -21,6 +21,13 @@ interface UpgradeItem {
   level: number;
   baseCost: number;
   desc: string;
+}
+
+interface GameCoin {
+  id: string;
+  x: number;
+  y: number;
+  value: number;
 }
 
 export const GameView: React.FC = () => {
@@ -48,10 +55,14 @@ export const GameView: React.FC = () => {
   const [logs, setLogs] = useState<ExpeditionLog[]>([]);
   const [progress, setProgress] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [coins, setCoins] = useState<GameCoin[]>([]);
   
   // Ad Management
   const [activeAds, setActiveAds] = useState<{id: number, type: string}[]>([]);
   const [adsDestroyed, setAdsDestroyed] = useState(0);
+  const [preLaunchAdVisible, setPreLaunchAdVisible] = useState(false);
+  const [videoAdVisible, setVideoAdVisible] = useState(false);
+  const [activeCoinId, setActiveCoinId] = useState<string | null>(null);
   
   const [expeditionEndTime, setExpeditionEndTime] = useState<number | null>(null);
   const [currentExpeditionDuration, setCurrentExpeditionDuration] = useState<number>(0);
@@ -88,7 +99,6 @@ export const GameView: React.FC = () => {
       }
     } catch (e) {
       console.error("Avatar generation failed:", e);
-      // Fallback
       setAvatarUrl(`https://api.dicebear.com/7.x/pixel-art/svg?seed=${Math.random()}`);
     } finally {
       setIsGenerating(false);
@@ -98,12 +108,9 @@ export const GameView: React.FC = () => {
   const generateItemIcons = async () => {
     if (isGeneratingItems) return;
     setIsGeneratingItems(true);
-    
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
     const newUpgrades = await Promise.all(upgrades.map(async (item) => {
-      if (item.imgUrl) return item; // Skip already generated
-      
+      if (item.imgUrl) return item;
       try {
         const response = await ai.models.generateContent({
           model: 'gemini-2.5-flash-image',
@@ -114,7 +121,6 @@ export const GameView: React.FC = () => {
             imageConfig: { aspectRatio: "1:1" }
           }
         });
-        
         const part = response.candidates?.[0]?.content?.parts.find(p => p.inlineData);
         if (part?.inlineData) {
           return { ...item, imgUrl: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` };
@@ -124,7 +130,6 @@ export const GameView: React.FC = () => {
       }
       return item;
     }));
-    
     setUpgrades(newUpgrades);
     setIsGeneratingItems(false);
   };
@@ -135,7 +140,12 @@ export const GameView: React.FC = () => {
     }
   }, [activeTab]);
 
+  const initiateExpedition = () => {
+    setPreLaunchAdVisible(true);
+  };
+
   const startExpedition = () => {
+    setPreLaunchAdVisible(false);
     const baseDuration = calculateTotalDuration(expeditionLevel);
     const spdLevel = upgrades.find(u => u.id === 'spd')?.level || 1;
     const effectiveDuration = Math.ceil(baseDuration * (1 - Math.min(0.7, (spdLevel - 1) * 0.07)));
@@ -148,6 +158,7 @@ export const GameView: React.FC = () => {
     setProgress(0);
     setAdsDestroyed(0);
     setTimeLeft(effectiveDuration);
+    setCoins([]);
     
     setActiveAds([{ id: Date.now(), type: 'primary' }, { id: Date.now() + 1, type: 'secondary' }]);
     addLog(`Navazování spojení se Sektorem 0x${expeditionLevel.toString(16).toUpperCase()}...`, 'info');
@@ -163,6 +174,24 @@ export const GameView: React.FC = () => {
         setActiveAds(prev => [...prev, { id: Date.now(), type: 'respawn' }]);
       }
     }, 1500);
+  };
+
+  const handleCoinClick = (id: string) => {
+    setActiveCoinId(id);
+    setVideoAdVisible(true);
+  };
+
+  const claimCoinReward = () => {
+    if (activeCoinId) {
+      const coin = coins.find(c => c.id === activeCoinId);
+      if (coin) {
+        setMikelaReserves(prev => prev + coin.value);
+        setCoins(prev => prev.filter(c => c.id !== activeCoinId));
+        addLog(`MIKELA fragmenty dekódovány: +${coin.value} MK`, 'success');
+      }
+    }
+    setVideoAdVisible(false);
+    setActiveCoinId(null);
   };
 
   const handleUpgrade = (id: string) => {
@@ -197,6 +226,17 @@ export const GameView: React.FC = () => {
         return 'EXTRACTING';
       });
 
+      // Spawn Coins logic
+      if (Math.random() < 0.05 && coins.length < 3 && currentProgress > 15 && currentProgress < 90) {
+        const newCoin: GameCoin = {
+          id: Math.random().toString(),
+          x: 10 + Math.random() * 80,
+          y: 20 + Math.random() * 60,
+          value: Math.floor(50 * expeditionLevel * (1 + Math.random()))
+        };
+        setCoins(prev => [...prev, newCoin]);
+      }
+
       if (activeAds.length === 0 && remaining > 4 && phase !== 'STARTING') {
         setActiveAds([{ id: Date.now(), type: 'auto' }]);
       }
@@ -219,12 +259,89 @@ export const GameView: React.FC = () => {
       }
     }, 250);
     return () => clearInterval(interval);
-  }, [activeExpedition, expeditionEndTime, adsDestroyed, expeditionLevel, activeAds, phase]);
+  }, [activeExpedition, expeditionEndTime, adsDestroyed, expeditionLevel, activeAds, phase, coins]);
 
   const playerAtk = upgrades.find(u => u.id === 'atk')?.level || 1;
 
   return (
     <div className="flex h-full w-full bg-black/40 border-t border-[#00f3ff]/20 relative overflow-hidden">
+      
+      {/* Video Ad Modal for Coins */}
+      {videoAdVisible && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl animate-in fade-in zoom-in duration-300">
+          <div className="relative w-full max-w-4xl p-1 bg-[#00f3ff]/20 border border-[#00f3ff]/50 shadow-[0_0_50px_rgba(0,243,255,0.3)]">
+            <div className="bg-black p-4 flex justify-between items-center border-b border-[#00f3ff]/30">
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 bg-red-500 animate-pulse" />
+                <span className="text-xs font-black text-[#00f3ff] uppercase tracking-widest">HLOUBKOVÁ_DEKRYPTACE_DAT</span>
+              </div>
+              <button onClick={() => setVideoAdVisible(false)} className="text-[#ff00ff] hover:text-white transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="relative aspect-video bg-black flex flex-col">
+              {/* This is where the provided video ad code goes */}
+              <iframe 
+                src="https://groundedmine.com/d.mTFSzgdpGDNYvcZcGXUK/FeJm/9IuZZNUElDktPwTaYW3CNUz/YTwMNFD/ket-N/j_c/3qN/jPA/1cMuwy"
+                className="w-full h-full border-0"
+                title="Hacking Reward Uplink"
+              />
+              
+              <div className="absolute bottom-4 left-4 right-4 bg-black/80 border border-[#00f3ff]/30 p-4 backdrop-blur-md flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] text-[#00f3ff] uppercase font-bold tracking-tighter">Probíhá autorizace přenosu...</p>
+                  <p className="text-[8px] text-white/40 uppercase mt-1 tracking-widest">Sledujte video pro dokončení dekódování</p>
+                </div>
+                <button 
+                  onClick={claimCoinReward}
+                  className="px-6 py-2 bg-[#ff00ff] text-black font-black uppercase text-[10px] tracking-widest hover:bg-white transition-all shadow-[0_0_15px_rgba(255,0,255,0.4)]"
+                >
+                  DOKONČIT_PŘENOS
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pre-Launch Ad Protocol Overlay */}
+      {preLaunchAdVisible && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-500 p-6">
+          <div className="w-full max-w-lg border-2 border-[#ff00ff] bg-black p-8 shadow-[0_0_40px_rgba(255,0,255,0.2)]">
+            <div className="flex items-center gap-4 mb-8">
+              <ShieldAlert className="text-red-500 animate-pulse" size={40} />
+              <div>
+                <h3 className="text-xl font-black text-white italic uppercase tracking-widest">PŘED-START_PROTOKOL</h3>
+                <p className="text-[9px] text-red-500 font-bold uppercase tracking-widest">Nutná autorizace přes reklamní uzel</p>
+              </div>
+            </div>
+            
+            <div className="bg-[#00f3ff]/5 border border-[#00f3ff]/20 p-4 mb-8 flex flex-col items-center">
+              <AdBanner playerAtk={1} />
+              <p className="mt-4 text-[8px] text-white/30 uppercase text-center max-w-xs">
+                Klikněte na banner pro ověření identity. Po eliminaci hrozeb bude mise autorizována.
+              </p>
+            </div>
+
+            <div className="flex gap-4">
+               <button 
+                onClick={() => setPreLaunchAdVisible(false)}
+                className="flex-1 py-4 border border-white/20 text-white/40 text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors"
+              >
+                ZRUŠIT
+              </button>
+              <button 
+                onClick={startExpedition}
+                className="flex-1 py-4 bg-[#ff00ff] text-black text-[10px] font-black uppercase tracking-widest hover:bg-white transition-colors"
+              >
+                AUTORIZOVAT_START
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Sidebar */}
       <aside className="w-16 md:w-64 border-r border-[#00f3ff]/20 bg-black/90 flex flex-col py-6 shrink-0 z-20">
         <div className="mb-10 flex flex-col items-center">
@@ -270,7 +387,7 @@ export const GameView: React.FC = () => {
 
             <div className="flex-1 min-h-[500px] relative bg-[#020202] border-2 border-white/5 overflow-hidden flex flex-col shadow-[inset_0_0_120px_rgba(0,0,0,1)]">
               {/* Reklamy Layer */}
-              <div className="absolute inset-x-0 top-0 h-1/2 z-30 p-6 flex flex-col items-center justify-center gap-4 pointer-events-none">
+              <div className="absolute inset-0 z-30 p-6 flex flex-col items-center justify-start gap-4 pointer-events-none">
                 <div className="pointer-events-auto flex flex-col gap-4">
                   {activeAds.map(ad => (
                     <AdBanner 
@@ -282,6 +399,26 @@ export const GameView: React.FC = () => {
                 </div>
               </div>
 
+              {/* Coins Layer */}
+              <div className="absolute inset-0 z-20 pointer-events-none overflow-hidden">
+                {coins.map(coin => (
+                  <button 
+                    key={coin.id}
+                    onClick={() => handleCoinClick(coin.id)}
+                    className="absolute pointer-events-auto group animate-in fade-in zoom-in duration-500"
+                    style={{ left: `${coin.x}%`, top: `${coin.y}%` }}
+                  >
+                    <div className="relative">
+                       <div className="absolute inset-0 bg-[#ff00ff] blur-md opacity-40 animate-pulse" />
+                       <div className="relative bg-black border border-[#ff00ff] p-2 flex flex-col items-center gap-1 shadow-[0_0_15px_#ff00ff]">
+                          <Coins className="text-[#ff00ff]" size={20} />
+                          <span className="text-[8px] font-black text-[#ff00ff] whitespace-nowrap">CHUNK_MK</span>
+                       </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
               <div className="flex-1 flex flex-col items-center justify-center p-10 text-center relative z-10 pointer-events-none">
                 {(phase === 'TRAVELING' || phase === 'EXTRACTING') && (
                   <div className="space-y-6">
@@ -289,6 +426,7 @@ export const GameView: React.FC = () => {
                      <div className="bg-black/80 p-5 border border-[#00f3ff]/20">
                         <p className="text-[#00f3ff] font-black uppercase tracking-[0.2em] text-xs">Likvidujte bannery pro stabilizaci</p>
                         <p className="text-white/20 text-[9px] uppercase mt-2">Data Fragmenty: {adsDestroyed}</p>
+                        <p className="text-[#ff00ff] text-[9px] uppercase mt-1 font-bold animate-pulse">Chytejte MIKELA fragmenty na mapě!</p>
                      </div>
                   </div>
                 )}
@@ -376,7 +514,7 @@ export const GameView: React.FC = () => {
                 <div className="w-full max-w-xl border-2 border-[#ff00ff]/40 bg-black/80 p-16 text-center">
                   <Sword size={64} className="text-[#ff00ff] mx-auto mb-8" />
                   <h2 className="text-3xl font-black text-white uppercase italic mb-4 tracking-widest">HLUBOKÝ_PRŮNIK</h2>
-                  <button onClick={startExpedition} className="px-16 py-5 bg-[#00f3ff] text-black font-black uppercase tracking-[0.3em] hover:bg-white transition-all">START_MISE</button>
+                  <button onClick={initiateExpedition} className="px-16 py-5 bg-[#00f3ff] text-black font-black uppercase tracking-[0.3em] hover:bg-white transition-all">START_MISE</button>
                 </div>
               </div>
             )}
@@ -428,7 +566,19 @@ export const GameView: React.FC = () => {
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #00f3ff; }
         .pixelated { image-rendering: pixelated; }
+        @keyframes shield-alert {
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 1; transform: scale(1.1); }
+        }
+        .shield-alert-anim { animation: shield-alert 2s infinite ease-in-out; }
       `}</style>
     </div>
   );
 };
+
+const ShieldAlert = ({ className, size }: { className?: string, size?: number }) => (
+  <div className={`relative ${className}`}>
+    <Shield size={size} className="shield-alert-anim" />
+    <AlertTriangle size={size ? size/2 : 20} className="absolute inset-0 m-auto text-red-600" />
+  </div>
+);
