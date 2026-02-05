@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Sword, Package, Zap, Compass, Truck, Timer, Trophy, Shield, AlertTriangle, ChevronRight, Activity, Clock, Loader2, Coins, X, Terminal, Database, ShieldAlert as AlertIcon, PlayCircle, Lock, ExternalLink, RefreshCw, Eye, Signal, Volume2 } from 'lucide-react';
+import { User, Sword, Package, Zap, Compass, Truck, Timer, Trophy, Shield, AlertTriangle, ChevronRight, Activity, Clock, Loader2, Coins, X, Terminal, Database, ShieldAlert as AlertIcon, PlayCircle, Lock, ExternalLink, RefreshCw, Eye, Signal, Volume2, Play } from 'lucide-react';
 import { AdBanner } from './AdBanner';
 
 type GameTab = 'profile' | 'expeditions' | 'items';
@@ -33,9 +33,9 @@ declare global {
   }
 }
 
-// Nejnovější HilltopAds VAST Tag URL poskytnutá uživatelem
+// VAST Tag URL s 60s limitem podle požadavků
 const VIDEO_AD_URL = "https://groundedmine.com/d.mGFPz/doGqNEv-ZbGTUR/AeHmI9/uzZoUxlUkMPwToYV3BN/zSY/wDNsD/k/tZNvjAc/3RNijgAA1vMQwg";
-const AD_WATCH_DURATION = 15; 
+const AD_WATCH_DURATION = 60; 
 
 export const GameView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<GameTab>('profile');
@@ -68,10 +68,11 @@ export const GameView: React.FC = () => {
   const [activeCoinId, setActiveCoinId] = useState<string | null>(null);
   const [isVideoForStart, setIsVideoForStart] = useState(false);
   const [isAdPlaying, setIsAdPlaying] = useState(false);
+  const [adError, setAdError] = useState<string | null>(null);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerInstance = useRef<any>(null);
-  const playbackDetectedRef = useRef(false);
+  const playbackCheckInterval = useRef<any>(null);
 
   const calculateTotalDuration = (level: number) => Math.max(15, 20 + (level - 1) * 4);
 
@@ -79,58 +80,61 @@ export const GameView: React.FC = () => {
     setLogs(prev => [{ id: Math.random().toString(), text, type }, ...prev].slice(0, 12));
   };
 
+  const initPlayer = () => {
+    if (!videoRef.current || !window.fluidPlayer) return;
+    
+    // Zničit starou instanci pokud existuje
+    if (playerInstance.current) {
+      try { playerInstance.current.destroy(); } catch(e) {}
+    }
+
+    setAdError(null);
+    setIsAdPlaying(false);
+
+    playerInstance.current = window.fluidPlayer(videoRef.current, {
+      layoutControls: {
+        fillToContainer: true,
+        autoPlay: true,
+        mute: true,
+        allowDownload: false,
+        playbackRateControl: false,
+        persistentSettings: { volume: false },
+        posterImage: '/api/placeholder/1280/720'
+      },
+      vastOptions: {
+        allowVPAID: true,
+        adList: [
+          {
+            roll: 'preRoll',
+            vastTag: VIDEO_AD_URL
+          }
+        ],
+        adStartedCallback: () => {
+          setIsAdPlaying(true);
+          addLog("Uplink Established. Receiving encrypted data...", "info");
+        },
+        adFinishedCallback: () => {
+          addLog("Ad Transmission Segment Finished.", "success");
+        },
+        adErrorCallback: (err: any) => {
+          console.error("VAST Error:", err);
+          setAdError("CHYBA PŘIPOJENÍ K UZLU");
+          addLog("VAST Protocol Error: Signal lost.", "error");
+        }
+      }
+    });
+  };
+
   const openVideoAd = (forStart: boolean = false) => {
     setIsVideoForStart(forStart);
     setVideoAdVisible(true);
     setVideoAdTimer(AD_WATCH_DURATION);
-    setIsAdPlaying(false);
-    playbackDetectedRef.current = false;
+    
+    // Malá prodleva pro zajištění renderu videa
+    setTimeout(() => {
+      initPlayer();
+    }, 100);
   };
-
-  useEffect(() => {
-    if (videoAdVisible && videoRef.current && window.fluidPlayer) {
-      // Inicializace Fluid Player pro VAST s podporou VPAID
-      playerInstance.current = window.fluidPlayer(videoRef.current, {
-        layoutControls: {
-          fillToContainer: true,
-          autoPlay: true,
-          mute: true,
-          allowDownload: false,
-          playbackRateControl: false,
-          persistentSettings: { volume: false }
-        },
-        vastOptions: {
-          allowVPAID: true,
-          adList: [
-            {
-              roll: 'preRoll',
-              vastTag: VIDEO_AD_URL
-            }
-          ],
-          adFinishedCallback: () => {
-            addLog("Ad Transmission Complete.", "success");
-          }
-        }
-      });
-
-      // Detekce přehrávání pro spuštění odpočtu
-      const checkPlayback = setInterval(() => {
-        if (playerInstance.current && !playbackDetectedRef.current) {
-          playbackDetectedRef.current = true;
-          setIsAdPlaying(true);
-          addLog("Uplink Established. Verifying data packets...", "info");
-        }
-      }, 1000);
-
-      return () => {
-        clearInterval(checkPlayback);
-        if (playerInstance.current) {
-          try { playerInstance.current.destroy(); } catch(e) {}
-          playerInstance.current = null;
-        }
-      };
-    }
-  }, [videoAdVisible]);
 
   useEffect(() => {
     let timer: number;
@@ -249,17 +253,18 @@ export const GameView: React.FC = () => {
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
-      {/* MODÁLNÍ OKNO VIDEO REKLAMY S MANUÁLNÍM ČASOVAČEM */}
+      {/* VAST AD MODAL OVERLAY */}
       {videoAdVisible && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/98 backdrop-blur-3xl animate-in fade-in duration-500">
           <div className="w-full max-w-4xl bg-black border-2 border-[#00f3ff]/40 shadow-[0_0_150px_rgba(0,243,255,0.2)] relative overflow-hidden flex flex-col">
             
-            {/* Hlavička modálu */}
+            {/* Modal Header */}
             <div className="p-5 border-b border-[#00f3ff]/20 flex justify-between items-center bg-[#050505]">
                <div className="flex items-center gap-4">
                  <Signal className="text-red-600 animate-pulse" size={20} />
-                 <span className="text-sm font-black uppercase tracking-[0.25em]">{isVideoForStart ? 'PŘED-START_VAST_VERIFIKACE' : 'DATAVÝ_VAST_PŘENOS'}</span>
+                 <span className="text-sm font-black uppercase tracking-[0.25em]">{isVideoForStart ? 'VERIFIKACE STARTU' : 'PŘÍJEM DAT'}</span>
                </div>
+               {/* Křížek se zobrazí pouze pokud časovač vypršel */}
                {videoAdTimer <= 0 && (
                  <button onClick={() => setVideoAdVisible(false)} className="text-[#ff00ff] hover:text-white transition-all transform hover:rotate-90">
                    <X size={24} />
@@ -267,47 +272,66 @@ export const GameView: React.FC = () => {
                )}
             </div>
 
-            {/* Kontejner přehrávače */}
+            {/* Video Player Container */}
             <div className="aspect-video bg-[#010101] relative flex flex-col items-center justify-center overflow-hidden">
                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,243,255,0.05)_0%,transparent_70%)] pointer-events-none" />
 
                <div className="w-full h-full z-10">
-                  <video ref={videoRef} id="video-ad-player">
+                  <video ref={videoRef} id="video-ad-player" playsInline>
                     <source src="" type="video/mp4" />
                   </video>
                </div>
                
-               {/* Stavový overlay nad videem */}
-               <div className="absolute bottom-0 left-0 w-full p-10 bg-gradient-to-t from-black via-black/90 to-transparent flex flex-col items-center gap-6 z-30 pointer-events-none">
+               {/* Autoplay Fallback UI */}
+               {!isAdPlaying && !adError && (
+                 <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm">
+                   <div className="p-10 border-2 border-[#00f3ff] bg-black shadow-[0_0_30px_#00f3ff] text-center space-y-6">
+                      <div className="flex justify-center"><Loader2 className="animate-spin text-[#00f3ff]" size={48} /></div>
+                      <p className="text-xl font-black uppercase tracking-widest italic">Čekání na inicializaci uplink...</p>
+                      <button 
+                        onClick={() => initPlayer()}
+                        className="px-8 py-3 bg-[#00f3ff] text-black font-black uppercase tracking-widest hover:bg-white transition-colors flex items-center gap-2"
+                      >
+                        <Play size={18} /> Ruční spuštění
+                      </button>
+                   </div>
+                 </div>
+               )}
+
+               {/* Error State */}
+               {adError && (
+                 <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-red-950/20 backdrop-blur-md">
+                    <div className="p-8 border-2 border-red-500 bg-black text-center space-y-4">
+                       <AlertTriangle className="text-red-500 mx-auto" size={48} />
+                       <p className="text-red-500 font-black uppercase tracking-widest">{adError}</p>
+                       <button onClick={() => initPlayer()} className="text-xs bg-red-500/20 px-4 py-2 border border-red-500/50 hover:bg-red-500 hover:text-white transition-all uppercase">Zkusit znovu</button>
+                    </div>
+                 </div>
+               )}
+               
+               {/* Countdown and Control Overlay */}
+               <div className="absolute bottom-0 left-0 w-full p-8 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col items-center gap-4 z-50 pointer-events-none">
                   {videoAdTimer > 0 ? (
-                    <div className="flex flex-col items-center gap-4 bg-black/80 px-12 py-6 border border-[#00f3ff]/20 backdrop-blur-md shadow-2xl pointer-events-auto">
-                       <div className="flex items-center gap-6">
-                         {!isAdPlaying ? (
-                            <Loader2 className="animate-spin text-[#00f3ff]" size={20} />
-                         ) : (
-                            <Activity className="text-[#00f3ff] animate-pulse" size={20} />
-                         )}
-                         <div className="flex flex-col">
-                            <span className="text-[11px] font-black uppercase tracking-[0.3em] text-[#00f3ff]">{!isAdPlaying ? 'PŘÍPRAVA_VAST_PROTOKOLU' : 'DATOVÝ_TOK_AKTIVNÍ'}</span>
-                            <span className="text-[9px] text-white/40 uppercase tracking-widest font-bold">ZABEZPEČENÉ_SPOJENÍ: {videoAdTimer}S</span>
-                         </div>
+                    <div className="flex flex-col items-center gap-3 bg-black/60 px-10 py-4 border border-[#00f3ff]/20 backdrop-blur-md pointer-events-auto">
+                       <div className="flex items-center gap-4">
+                         <Activity className="text-[#00f3ff] animate-pulse" size={18} />
+                         <span className="text-[10px] text-white/40 uppercase tracking-[0.3em] font-bold">Synchronizace streamu: {videoAdTimer}S</span>
                        </div>
-                       <div className="w-64 h-2 bg-white/5 relative rounded-full overflow-hidden border border-white/5">
+                       <div className="w-48 h-1.5 bg-white/5 relative rounded-full overflow-hidden">
                           <div className="h-full bg-gradient-to-r from-[#00f3ff] to-[#ff00ff] transition-all duration-1000 linear" style={{ width: `${(1 - videoAdTimer/AD_WATCH_DURATION) * 100}%` }} />
                        </div>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center gap-8 animate-in zoom-in slide-in-from-bottom-8 duration-700 pointer-events-auto">
-                       <div className="flex items-center gap-3 bg-green-500/20 border-2 border-green-500/50 px-8 py-3 rounded-full shadow-[0_0_20px_rgba(34,197,94,0.3)]">
-                          <Shield size={18} className="text-green-400" />
-                          <p className="text-xs font-black uppercase tracking-[0.25em] text-green-400">PŘENOS_VAST_DOKONČEN</p>
+                    <div className="flex flex-col items-center gap-6 animate-in zoom-in duration-500 pointer-events-auto">
+                       <div className="flex items-center gap-2 bg-green-500/20 border border-green-500 px-6 py-2 rounded-sm">
+                          <Shield size={14} className="text-green-400" />
+                          <p className="text-[10px] font-black uppercase tracking-widest text-green-400">DATA ZAJIŠTĚNA</p>
                        </div>
                        <button 
                         onClick={claimVideoReward} 
-                        className="group relative px-24 py-6 bg-[#ff00ff] text-black font-black uppercase text-base tracking-[0.5em] hover:bg-white transition-all shadow-[0_0_50px_rgba(255,0,255,0.5)] transform hover:scale-105 active:scale-95"
+                        className="group relative px-20 py-5 bg-[#ff00ff] text-black font-black uppercase text-sm tracking-[0.4em] hover:bg-white transition-all shadow-[0_0_40px_rgba(255,0,255,0.4)] transform hover:scale-105"
                        >
-                         <span className="relative z-10">POTVRDIT_PŘÍJEM_DAT</span>
-                         <div className="absolute inset-0 bg-white scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-500" />
+                         POTVRDIT PŘÍJEM DAT
                        </button>
                     </div>
                   )}
@@ -315,12 +339,10 @@ export const GameView: React.FC = () => {
             </div>
 
             <div className="p-4 bg-[#050505] flex justify-between items-center border-t border-white/5 px-8">
-               <span className="text-[8px] opacity-20 uppercase tracking-[0.4em]">Protocol: HilltopAds_Fluid_VAST_v3 | 0xDEADBEEF</span>
-               <div className="flex gap-4">
-                  <button onClick={() => window.open(VIDEO_AD_URL, '_blank')} className="text-[8px] uppercase tracking-widest text-[#00f3ff]/40 hover:text-white flex items-center gap-1">
-                    <ExternalLink size={10} /> Manuální_Odkaz
-                  </button>
-               </div>
+               <span className="text-[8px] opacity-20 uppercase tracking-[0.4em]">Protocol: VAST_SECURE_LINK_v3 | FluidPlayer_Ready</span>
+               <button onClick={() => window.open(VIDEO_AD_URL, '_blank')} className="text-[8px] uppercase tracking-widest text-[#00f3ff]/40 hover:text-white flex items-center gap-1">
+                 <ExternalLink size={10} /> Otevřít uzel v novém okně
+               </button>
             </div>
           </div>
         </div>
@@ -357,12 +379,12 @@ export const GameView: React.FC = () => {
             <div className="px-12 py-8 border-b border-white/10 bg-black/95 flex justify-between items-center backdrop-blur-3xl z-10 shadow-[0_10px_40px_rgba(0,0,0,0.8)]">
               <div className="flex items-center gap-12">
                 <div className="space-y-2">
-                  <span className="text-[9px] text-[#00f3ff]/40 uppercase font-black block tracking-[0.2em]">Deep_Sector</span>
+                  <span className="text-[9px] text-[#00f3ff]/40 uppercase font-black block tracking-[0.2em]">Sektor</span>
                   <span className="text-2xl font-black text-white italic uppercase tracking-[0.25em] neon-glow-cyan">0x{expeditionLevel.toString(16).toUpperCase()}</span>
                 </div>
                 <div className="h-12 w-[2px] bg-white/10" />
                 <div className="space-y-2">
-                  <span className="text-[9px] text-[#ff00ff]/40 uppercase font-black block tracking-[0.2em]">Uplink_Signal</span>
+                  <span className="text-[9px] text-[#ff00ff]/40 uppercase font-black block tracking-[0.2em]">Signál</span>
                   <div className="flex items-center gap-3">
                     <div className="w-2.5 h-2.5 rounded-full bg-[#00f3ff] animate-ping" />
                     <span className="text-sm font-black text-[#00f3ff] uppercase tracking-[0.2em]">{phase}</span>
@@ -372,7 +394,7 @@ export const GameView: React.FC = () => {
               
               <div className="flex items-center gap-10">
                 <div className="text-right border-r border-white/10 pr-10">
-                   <span className="text-[9px] text-white/30 uppercase font-black block mb-1.5 tracking-widest">Fragments_Analyzed</span>
+                   <span className="text-[9px] text-white/30 uppercase font-black block mb-1.5 tracking-widest">Analyzováno</span>
                    <span className="text-lg font-black text-[#ff00ff] tabular-nums tracking-widest">{adsDestroyed} <span className="text-[10px] opacity-40">/ {Math.floor(expeditionLevel * 0.7)}</span></span>
                 </div>
                 <div className="flex items-center gap-6 bg-[#00f3ff]/5 border-2 border-[#00f3ff]/20 px-12 py-5 rounded-lg shadow-[inset_0_0_15px_rgba(0,243,255,0.6)]">
@@ -413,7 +435,7 @@ export const GameView: React.FC = () => {
                           <div className="bg-black border-2 border-[#ff00ff] p-6 flex flex-col items-center gap-3 shadow-[0_0_50px_rgba(255,0,255,0.5)] group-hover:border-white group-hover:shadow-[0_0_80px_rgba(255,255,255,0.3)] transition-all">
                             <Coins className="text-[#ff00ff] group-hover:text-white group-hover:animate-bounce" size={40} />
                             <div className="text-center space-y-1">
-                               <span className="text-[10px] font-black text-white bg-[#ff00ff] px-3 py-1 tracking-tighter block">DECRYPT_UPLINK</span>
+                               <span className="text-[10px] font-black text-white bg-[#ff00ff] px-3 py-1 tracking-tighter block">DECRYPT</span>
                                <span className="text-[9px] font-bold text-[#ff00ff] tracking-[0.1em] group-hover:text-white">{coin.value} MK</span>
                             </div>
                           </div>
@@ -432,13 +454,13 @@ export const GameView: React.FC = () => {
                         <AlertTriangle size={140} className="text-red-500 mx-auto mb-12 animate-pulse" />
                       )}
                       <h2 className={`text-8xl font-black text-white italic uppercase tracking-tighter mb-8 ${phase === 'COMPLETED' ? 'neon-glow-cyan' : ''}`}>
-                        {phase === 'COMPLETED' ? 'SEKTOR_VYČIŠTĚN' : 'EXPEDICE_SELHALA'}
+                        {phase === 'COMPLETED' ? 'SEKTOR VYČIŠTĚN' : 'EXPEDICE SELHALA'}
                       </h2>
                       <p className="text-sm text-[#00f3ff] uppercase font-black mb-16 tracking-[0.5em] opacity-80 animate-pulse">
                         {phase === 'COMPLETED' ? 'Data Secured | Connection Stable | Rewarding Uplink' : 'Link Lost | Data Corrupted | Unauthorized Access'}
                       </p>
                       <button onClick={() => setActiveExpedition(false)} className="group relative px-32 py-10 bg-[#00f3ff] text-black font-black uppercase tracking-[0.8em] hover:bg-white transition-all text-lg overflow-hidden shadow-[0_0_50px_rgba(0,243,255,0.5)]">
-                        <span className="relative z-10">ODPOJIT_LINK</span>
+                        <span className="relative z-10">ODPOJIT LINK</span>
                         <div className="absolute inset-0 bg-white translate-x-full group-hover:translate-x-0 transition-transform duration-500" />
                       </button>
                     </div>
@@ -458,7 +480,7 @@ export const GameView: React.FC = () => {
                   {logs.map(log => (
                     <div key={log.id} className={`text-[11px] uppercase leading-relaxed border-l-3 pl-5 transition-all animate-in slide-in-from-right-6 duration-500 ${log.type === 'success' ? 'border-green-500 text-green-400' : log.type === 'error' ? 'border-red-600 text-red-500' : 'border-[#00f3ff]/40 text-[#00f3ff]/60'}`}>
                       <div className="flex justify-between items-center opacity-40 text-[8px] mb-2 tracking-[0.1em]">
-                         <span>EVENT_NODE_{log.id.slice(-6)}</span>
+                         <span>NODE_{log.id.slice(-4)}</span>
                          <span>{new Date().toLocaleTimeString()}</span>
                       </div>
                       <span className="font-black tracking-tight block leading-snug drop-shadow-lg">{log.text}</span>
@@ -468,7 +490,7 @@ export const GameView: React.FC = () => {
                 <div className="p-10 bg-black/95 border-t border-white/10 space-y-8">
                    <div className="space-y-4">
                       <div className="flex justify-between text-[11px] text-[#00f3ff] font-black tracking-[0.4em] uppercase">
-                        <span>EXTRAKCE_DAT</span>
+                        <span>EXTRAKCE</span>
                         <span className="neon-glow-cyan font-mono">{progress}%</span>
                       </div>
                       <div className="h-3 bg-white/5 relative rounded-full overflow-hidden p-1 border border-white/10">
@@ -493,21 +515,21 @@ export const GameView: React.FC = () => {
                   </div>
                   <div className="space-y-10 relative z-10 flex-1 text-center lg:text-left">
                     <div className="space-y-3">
-                       <span className="text-[12px] text-[#00f3ff] font-black uppercase tracking-[0.6em] opacity-40 block animate-pulse">Network_Master_Admin</span>
+                       <span className="text-[12px] text-[#00f3ff] font-black uppercase tracking-[0.6em] opacity-40 block animate-pulse">Network Admin</span>
                        <h2 className="text-8xl font-black text-white italic uppercase tracking-tighter neon-glow-cyan leading-none">ADMIN_77</h2>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
-                      <div className="flex flex-col border-l-6 border-[#00f3ff] pl-10 py-3 bg-white/[0.03] backdrop-blur-md hover:bg-[#00f3ff]/5 transition-colors group/stat"><span className="text-[11px] text-[#00f3ff] font-black uppercase tracking-[0.4em] mb-3 opacity-60">MIKELA_VAL_RESERVES</span><span className="text-5xl font-black text-white tracking-tighter tabular-nums group-hover/stat:neon-glow-cyan transition-all">{mikelaReserves.toLocaleString()} MK</span></div>
-                      <div className="flex flex-col border-l-6 border-[#ff00ff] pl-10 py-3 bg-white/[0.03] backdrop-blur-md hover:bg-[#ff00ff]/5 transition-colors group/stat"><span className="text-[11px] text-[#ff00ff] font-black uppercase tracking-[0.4em] mb-3 opacity-60">GLOBAL_REPUTATION</span><span className="text-5xl font-black text-white tracking-tighter tabular-nums group-hover/stat:neon-glow-pink transition-all">{reputation.toLocaleString()} XP</span></div>
+                      <div className="flex flex-col border-l-6 border-[#00f3ff] pl-10 py-3 bg-white/[0.03] backdrop-blur-md hover:bg-[#00f3ff]/5 transition-colors group/stat"><span className="text-[11px] text-[#00f3ff] font-black uppercase tracking-[0.4em] mb-3 opacity-60">RESERVY MIKELA</span><span className="text-5xl font-black text-white tracking-tighter tabular-nums group-hover/stat:neon-glow-cyan transition-all">{mikelaReserves.toLocaleString()} MK</span></div>
+                      <div className="flex flex-col border-l-6 border-[#ff00ff] pl-10 py-3 bg-white/[0.03] backdrop-blur-md hover:bg-[#ff00ff]/5 transition-colors group/stat"><span className="text-[11px] text-[#ff00ff] font-black uppercase tracking-[0.4em] mb-3 opacity-60">REPUTACE</span><span className="text-5xl font-black text-white tracking-tighter tabular-nums group-hover/stat:neon-glow-pink transition-all">{reputation.toLocaleString()} XP</span></div>
                     </div>
                   </div>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
                    {[
-                     { label: 'System Tier', val: `0x${expeditionLevel.toString(16).toUpperCase()}`, color: '#00f3ff', icon: Eye },
-                     { label: 'Purged Anomalies', val: adsDestroyed, color: '#ff00ff', icon: Zap },
-                     { label: 'VAST Integrity', val: 'STABLE', color: '#10b981', icon: Shield }
+                     { label: 'Tier Systému', val: `0x${expeditionLevel.toString(16).toUpperCase()}`, color: '#00f3ff', icon: Eye },
+                     { label: 'Odstraněno chyb', val: adsDestroyed, color: '#ff00ff', icon: Zap },
+                     { label: 'Integrita VAST', val: 'STABLE', color: '#10b981', icon: Shield }
                    ].map((stat, i) => (
                     <div key={i} className="p-12 border-2 border-white/5 bg-white/[0.01] hover:bg-white/[0.05] transition-all hover:-translate-y-3 duration-500 group relative overflow-hidden">
                        <span className="text-[12px] text-white/40 uppercase font-black tracking-[0.4em] block mb-6">{stat.label}</span>
@@ -529,7 +551,7 @@ export const GameView: React.FC = () => {
                     </div>
                   </div>
                   <div className="space-y-10 relative">
-                    <h2 className="text-7xl font-black text-white uppercase italic tracking-[0.4em] leading-tight neon-glow-cyan">VSTOUPIT_DO_MATRIXU</h2>
+                    <h2 className="text-7xl font-black text-white uppercase italic tracking-[0.4em] leading-tight neon-glow-cyan">VSTOUPIT DO MATRIXU</h2>
                     <p className="text-base text-[#00f3ff]/60 max-w-2xl mx-auto leading-loose tracking-[0.3em] uppercase font-black">
                       Detekována hluboká vrstva Sektoru 0x{expeditionLevel.toString(16).toUpperCase()}. <br/> 
                       Nutná autorizace přes uzel <span className="text-[#ff00ff] neon-glow-pink">HilltopAds</span>.
@@ -541,7 +563,7 @@ export const GameView: React.FC = () => {
                   >
                     <div className="relative z-10 flex items-center gap-8">
                        <PlayCircle size={40} className="animate-pulse" />
-                       <span className="text-4xl font-black uppercase tracking-[0.6em]">AUTORIZOVAT_START</span>
+                       <span className="text-4xl font-black uppercase tracking-[0.6em]">AUTORIZOVAT START</span>
                     </div>
                   </button>
                 </div>
@@ -560,7 +582,7 @@ export const GameView: React.FC = () => {
                             <u.icon className={canAfford ? 'text-[#ff00ff] group-hover:scale-125 transition-transform duration-500' : 'text-white/10'} size={56} />
                           </div>
                           <div className="text-right">
-                             <span className="text-[12px] text-white/40 font-black uppercase tracking-[0.4em] block mb-3">Upgrade_Tier</span>
+                             <span className="text-[12px] text-white/40 font-black uppercase tracking-[0.4em] block mb-3">Verze Kódu</span>
                              <span className="text-6xl font-black text-[#ff00ff] italic group-hover:neon-glow-pink transition-all duration-500">v{u.level}</span>
                           </div>
                         </div>
@@ -577,9 +599,9 @@ export const GameView: React.FC = () => {
                           className={`w-full py-10 border-3 font-black text-base uppercase tracking-[0.5em] transition-all mt-auto flex items-center justify-center gap-6 shadow-2xl ${canAfford ? 'border-[#ff00ff] text-[#ff00ff] hover:bg-[#ff00ff] hover:text-black shadow-[0_0_30px_rgba(255,0,255,0.2)] hover:shadow-[0_0_60px_rgba(255,255,255,0.5)]' : 'border-white/10 text-white/10'}`}
                         >
                           {canAfford ? (
-                            <>AKTUALIZOVAT_KÓD | {cost.toLocaleString()} MK</>
+                            <>AKTUALIZOVAT | {cost.toLocaleString()} MK</>
                           ) : (
-                            <><Lock size={24} /> REZERVY_VYČERPÁNY</>
+                            <><Lock size={24} /> REZERVY VYČERPÁNY</>
                           )}
                         </button>
                       </div>
