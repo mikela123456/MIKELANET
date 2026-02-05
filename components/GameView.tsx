@@ -33,9 +33,9 @@ declare global {
   }
 }
 
-// Stable HilltopAds VAST Tag URL
-const VIDEO_AD_URL = "https://groundedmine.com/d.mGFPz/doGqNEv-ZbGTUR/AeHmI9/uzZoUxlUkMPwToYV3BN/zSY/wDNsD/k/tZNvjAc/3RNijgAA1vMQwg";
-const AD_WATCH_DURATION = 15; 
+// Updated VAST Tag URL provided by user
+const VIDEO_AD_URL = "https://groundedmine.com/dpmzFbz/d.GANRvbZjGiUS/ieemF9tu/ZOUCl_k/PVTpYG3_NWzeYNwEN/DQkwtsNFjccn3wN/jdA/1OMDwf";
+const AD_WATCH_DURATION = 60; 
 
 export const GameView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<GameTab>('profile');
@@ -89,6 +89,7 @@ export const GameView: React.FC = () => {
 
   useEffect(() => {
     if (videoAdVisible && videoRef.current && window.fluidPlayer) {
+      // Initialize Fluid Player with specific config for the provided VAST URL
       playerInstance.current = window.fluidPlayer(videoRef.current, {
         layoutControls: {
           fillToContainer: true,
@@ -96,7 +97,13 @@ export const GameView: React.FC = () => {
           mute: true,
           allowDownload: false,
           playbackRateControl: false,
-          persistentSettings: { volume: false }
+          persistentSettings: { volume: false },
+          adProgressbarColor: '#00f3ff',
+          controlBar: {
+            autoHide: true,
+            autoHideTimeout: 3,
+            animated: true
+          }
         },
         vastOptions: {
           allowVPAID: true,
@@ -106,22 +113,26 @@ export const GameView: React.FC = () => {
               vastTag: VIDEO_AD_URL
             }
           ],
+          adStartedCallback: () => {
+            if (!adStartedRef.current) {
+              adStartedRef.current = true;
+              setIsAdPlaying(true);
+              addLog("Navázáno spojení s reklamním uzlem. Stahování dat...", "info");
+            }
+          },
           adFinishedCallback: () => {
-            addLog("Uplink Transmission Complete.", "success");
+            addLog("Přenos reklamních dat dokončen.", "success");
+          },
+          adErrorCallback: (err: any) => {
+            console.error("Vast Error:", err);
+            addLog("Chyba při komunikaci s uzlem VAST.", "error");
+            // If ad fails, we still enforce the timer for consistency if required, 
+            // but usually we'd allow retry. Here we just log.
           }
         }
       });
 
-      const checkPlayback = setInterval(() => {
-        if (playerInstance.current && !adStartedRef.current) {
-          adStartedRef.current = true;
-          setIsAdPlaying(true);
-          addLog("Uplink Established. Verifying data packets...", "info");
-        }
-      }, 1000);
-
       return () => {
-        clearInterval(checkPlayback);
         if (playerInstance.current) {
           try { playerInstance.current.destroy(); } catch(e) {}
           playerInstance.current = null;
@@ -132,13 +143,14 @@ export const GameView: React.FC = () => {
 
   useEffect(() => {
     let timer: number;
-    if (videoAdVisible && isAdPlaying && videoAdTimer > 0) {
+    // The user must wait 60s regardless of ad length to fulfill the "60s duration" requirement
+    if (videoAdVisible && videoAdTimer > 0) {
       timer = window.setInterval(() => {
         setVideoAdTimer(prev => prev - 1);
       }, 1000);
     }
     return () => clearInterval(timer);
-  }, [videoAdVisible, isAdPlaying, videoAdTimer]);
+  }, [videoAdVisible, videoAdTimer]);
 
   const startExpedition = () => {
     setVideoAdVisible(false);
@@ -247,16 +259,17 @@ export const GameView: React.FC = () => {
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
-      {/* VIDEO AD MODAL */}
+      {/* VIDEO AD MODAL - STRICTLY UNINTERRUPTED PLAYBACK */}
       {videoAdVisible && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/98 backdrop-blur-3xl animate-in fade-in duration-500">
-          <div className="w-full max-w-4xl bg-black border-2 border-[#00f3ff]/40 shadow-[0_0_150px_rgba(0,243,255,0.2)] relative overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/98 backdrop-blur-3xl animate-in fade-in duration-500 cursor-default">
+          <div className="w-full max-w-5xl bg-black border-2 border-[#00f3ff]/40 shadow-[0_0_150px_rgba(0,243,255,0.2)] relative overflow-hidden flex flex-col">
             
             <div className="p-5 border-b border-[#00f3ff]/20 flex justify-between items-center bg-[#050505]">
                <div className="flex items-center gap-4">
-                 <Signal className="text-red-600 animate-pulse" size={20} />
-                 <span className="text-sm font-black uppercase tracking-[0.25em]">{isVideoForStart ? 'PŘED-START_VERIFIKACE' : 'DATAVÝ_PŘENOS'}</span>
+                 <Signal className="text-[#00f3ff] animate-pulse" size={20} />
+                 <span className="text-sm font-black uppercase tracking-[0.25em]">{isVideoForStart ? 'VERIFIKACE STARTU' : 'PŘÍJEM DATOVÝCH PAKETŮ'}</span>
                </div>
+               {/* Close button ONLY appears when timer is 0 */}
                {videoAdTimer <= 0 && (
                  <button onClick={() => setVideoAdVisible(false)} className="text-[#ff00ff] hover:text-white transition-all transform hover:rotate-90">
                    <X size={24} />
@@ -264,44 +277,46 @@ export const GameView: React.FC = () => {
                )}
             </div>
 
-            <div className="aspect-video bg-[#010101] relative flex flex-col items-center justify-center overflow-hidden">
-               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,243,255,0.05)_0%,transparent_70%)] pointer-events-none" />
-
+            <div className="aspect-video bg-[#000] relative flex flex-col items-center justify-center overflow-hidden">
+               {/* Ensure no crosshair or game cursor is present */}
+               <div className="absolute inset-0 z-0 bg-black" />
+               
                <div className="w-full h-full z-10">
-                  <video ref={videoRef} id="video-ad-player">
+                  <video ref={videoRef} id="video-ad-player" className="w-full h-full">
                     <source src="" type="video/mp4" />
                   </video>
                </div>
                
-               <div className="absolute bottom-0 left-0 w-full p-10 bg-gradient-to-t from-black via-black/90 to-transparent flex flex-col items-center gap-6 z-30 pointer-events-none">
+               {/* Playback Progress Overlay */}
+               <div className="absolute bottom-0 left-0 w-full p-8 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col items-center gap-5 z-40 pointer-events-none">
                   {videoAdTimer > 0 ? (
-                    <div className="flex flex-col items-center gap-4 bg-black/80 px-12 py-6 border border-[#00f3ff]/20 backdrop-blur-md shadow-2xl pointer-events-auto">
-                       <div className="flex items-center gap-6">
+                    <div className="flex flex-col items-center gap-3 bg-black/70 px-10 py-5 border border-[#00f3ff]/30 backdrop-blur-xl shadow-2xl pointer-events-auto">
+                       <div className="flex items-center gap-5">
                          {!isAdPlaying ? (
                             <Loader2 className="animate-spin text-[#00f3ff]" size={20} />
                          ) : (
                             <Activity className="text-[#00f3ff] animate-pulse" size={20} />
                          )}
                          <div className="flex flex-col">
-                            <span className="text-[11px] font-black uppercase tracking-[0.3em] text-[#00f3ff]">{!isAdPlaying ? 'PŘÍPRAVA UPLINKU' : 'DATOVÝ TOK AKTIVNÍ'}</span>
-                            <span className="text-[9px] text-white/40 uppercase tracking-widest font-bold">ZABEZPEČENÉ SPOJENÍ: {videoAdTimer}S</span>
+                            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-[#00f3ff] italic">{!isAdPlaying ? 'INICIALIZACE STREAMU' : 'STABILNÍ DATOVÝ TOK'}</span>
+                            <span className="text-[11px] text-white font-black uppercase tracking-widest">AUTORIZACE ZA: {videoAdTimer}S</span>
                          </div>
                        </div>
-                       <div className="w-64 h-2 bg-white/5 relative rounded-full overflow-hidden border border-white/5">
-                          <div className="h-full bg-gradient-to-r from-[#00f3ff] to-[#ff00ff] transition-all duration-1000 linear" style={{ width: `${(1 - videoAdTimer/AD_WATCH_DURATION) * 100}%` }} />
+                       <div className="w-72 h-1.5 bg-white/5 relative rounded-full overflow-hidden border border-white/10">
+                          <div className="h-full bg-gradient-to-r from-[#00f3ff] to-[#ff00ff] shadow-[0_0_10px_#00f3ff] transition-all duration-1000 linear" style={{ width: `${(1 - videoAdTimer/AD_WATCH_DURATION) * 100}%` }} />
                        </div>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center gap-8 animate-in zoom-in slide-in-from-bottom-8 duration-700 pointer-events-auto">
-                       <div className="flex items-center gap-3 bg-green-500/20 border-2 border-green-500/50 px-8 py-3 rounded-full shadow-[0_0_20px_rgba(34,197,94,0.3)]">
+                    <div className="flex flex-col items-center gap-8 animate-in zoom-in slide-in-from-bottom-10 duration-700 pointer-events-auto">
+                       <div className="flex items-center gap-3 bg-green-500/10 border-2 border-green-500/40 px-8 py-3 rounded-sm shadow-[0_0_30px_rgba(34,197,94,0.2)]">
                           <Shield size={18} className="text-green-400" />
-                          <p className="text-xs font-black uppercase tracking-[0.25em] text-green-400">PŘENOS DOKONČEN</p>
+                          <p className="text-xs font-black uppercase tracking-[0.3em] text-green-400">PAKETY BYLY KOMPLETNĚ PŘIJATY</p>
                        </div>
                        <button 
                         onClick={claimVideoReward} 
-                        className="group relative px-24 py-6 bg-[#ff00ff] text-black font-black uppercase text-base tracking-[0.5em] hover:bg-white transition-all shadow-[0_0_50px_rgba(255,0,255,0.5)] transform hover:scale-105 active:scale-95"
+                        className="group relative px-32 py-8 bg-[#ff00ff] text-black font-black uppercase text-lg tracking-[0.5em] hover:bg-white transition-all shadow-[0_0_60px_rgba(255,0,255,0.6)] transform hover:scale-110 active:scale-95 overflow-hidden"
                        >
-                         <span className="relative z-10">POTVRDIT PŘÍJEM</span>
+                         <span className="relative z-10">DOKONČIT VERIFIKACI</span>
                          <div className="absolute inset-0 bg-white scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-500" />
                        </button>
                     </div>
@@ -310,10 +325,10 @@ export const GameView: React.FC = () => {
             </div>
 
             <div className="p-4 bg-[#050505] flex justify-between items-center border-t border-white/5 px-8">
-               <span className="text-[8px] opacity-20 uppercase tracking-[0.4em]">Protocol: HilltopAds_VAST_v3 | Stable_Uplink</span>
+               <span className="text-[8px] opacity-30 uppercase tracking-[0.5em] font-black">Link_ID: {VIDEO_AD_URL.slice(-8)} | FP_v3.Secure</span>
                <div className="flex gap-4">
-                  <button onClick={() => window.open(VIDEO_AD_URL, '_blank')} className="text-[8px] uppercase tracking-widest text-[#00f3ff]/40 hover:text-white flex items-center gap-1">
-                    <ExternalLink size={10} /> Manuální Odkaz
+                  <button onClick={() => window.open(VIDEO_AD_URL, '_blank')} className="text-[8px] uppercase tracking-widest text-[#00f3ff]/40 hover:text-white flex items-center gap-2 transition-colors">
+                    <ExternalLink size={10} /> Manuální Odkaz Uzlu
                   </button>
                </div>
             </div>
