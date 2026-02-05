@@ -7,25 +7,28 @@ interface NavigationProps {
 
 export const Navigation: React.FC<NavigationProps> = ({ onLogout }) => {
   return (
-    <nav className="fixed top-0 left-0 w-full h-20 border-b border-[#00f3ff]/20 bg-black/60 backdrop-blur-md flex items-center justify-between px-6 z-50">
-      <div className="flex flex-col items-start">
-        <span className="text-[#00f3ff] font-black tracking-[0.2em] uppercase text-base neon-glow-cyan">
-          DASHBOARD
-        </span>
-        <div className="w-full h-[3px] bg-[#00f3ff] shadow-[0_0_10px_#00f3ff] mt-1" />
+    <nav className="absolute top-0 left-0 w-full h-16 border-b border-[#00f3ff]/20 bg-black/40 backdrop-blur-md flex items-center justify-between px-8 z-50">
+      <div className="flex items-center h-full">
+        <div className="relative h-full flex items-center px-4">
+          <span className="text-[#00f3ff] font-bold tracking-[0.2em] uppercase text-sm neon-glow-cyan">
+            Dashboard
+          </span>
+          <div className="absolute bottom-0 left-0 w-full h-[2px] bg-[#00f3ff] shadow-[0_0_10px_#00f3ff]" />
+        </div>
       </div>
       
-      <div className="flex flex-col items-center">
-        <span className="text-[10px] text-[#00f3ff]/60 uppercase tracking-[0.2em]">User ID</span>
-        <span className="text-sm text-[#00f3ff] font-black uppercase tracking-widest">ADMIN_77</span>
+      <div className="flex items-center space-x-4">
+        <div className="flex flex-col items-end mr-4">
+          <span className="text-[10px] text-[#00f3ff]/60 uppercase tracking-widest">User ID</span>
+          <span className="text-xs text-[#00f3ff] font-bold">ADMIN_77</span>
+        </div>
+        <button 
+          onClick={onLogout}
+          className="px-4 py-1 border border-[#ff00ff] text-[#ff00ff] text-[10px] uppercase font-bold hover:bg-[#ff00ff]/10 transition-colors"
+        >
+          Odhlásit
+        </button>
       </div>
-
-      <button 
-        onClick={onLogout}
-        className="px-6 py-2 border-2 border-[#ff00ff] text-[#ff00ff] text-[10px] uppercase font-black hover:bg-[#ff00ff]/10 transition-all active:scale-95"
-      >
-        Odhlásit
-      </button>
     </nav>
   );
 };
