@@ -1,16 +1,9 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { Zap, Loader2, Target, ShieldAlert, RefreshCw } from 'lucide-react';
 
 interface AdBannerProps {
   onDestroyed?: () => void;
   playerAtk?: number;
-}
-
-declare global {
-  interface Window {
-    atOptions: any;
-  }
 }
 
 export const AdBanner: React.FC<AdBannerProps> = ({ onDestroyed, playerAtk = 1 }) => {
@@ -28,35 +21,38 @@ export const AdBanner: React.FC<AdBannerProps> = ({ onDestroyed, playerAtk = 1 }
     const container = containerRef.current;
     container.innerHTML = '';
 
-    // Adsterra config
-    window.atOptions = {
-      'key' : '9ffa2bb84a4524c7addb7491067cb475',
-      'format' : 'iframe',
-      'height' : 50,
-      'width' : 320,
-      'params' : {}
-    };
+    // TwinRed injection logic
+    try {
+      const ins = document.createElement('ins');
+      ins.setAttribute('data-tr-zone', '01KGSWFNQSNGZ61WTP789YSEGN');
+      
+      const script = document.createElement('script');
+      script.type = 'text/javascript';
+      script.async = true;
+      script.src = 'https://s.ad.twinrdengine.com/adlib.js';
+      
+      script.onload = () => {
+        setTimeout(() => {
+          setIsLoading(false);
+          // Check if banner loaded something
+          if (container.innerHTML.length < 5) {
+            setLoadError(true);
+          }
+        }, 1200);
+      };
 
-    const script = document.createElement('script');
-    script.type = 'text/javascript';
-    script.src = `//ignateignatepredominanteatable.com/9ffa2bb84a4524c7addb7491067cb475/invoke.js?atb=${Date.now()}`;
-    
-    script.onload = () => {
-      setTimeout(() => {
+      script.onerror = () => {
         setIsLoading(false);
-        // Verify if anything was actually rendered to detect adblock
-        if (container.innerHTML.length < 10) {
-          setLoadError(true);
-        }
-      }, 800);
-    };
+        setLoadError(true);
+      };
 
-    script.onerror = () => {
-      setIsLoading(false);
+      container.appendChild(ins);
+      container.appendChild(script);
+    } catch (e) {
+      console.error("Ad injection error:", e);
       setLoadError(true);
-    };
-
-    container.appendChild(script);
+      setIsLoading(false);
+    }
 
     return () => {
       container.innerHTML = '';
@@ -99,7 +95,7 @@ export const AdBanner: React.FC<AdBannerProps> = ({ onDestroyed, playerAtk = 1 }
       <div className="flex justify-between items-center mb-1 px-1">
         <div className="flex items-center gap-1">
           <Target size={10} className="text-[#00f3ff]" />
-          <span className="text-[8px] text-[#00f3ff] font-black uppercase tracking-widest">AD_NODE_v9.5</span>
+          <span className="text-[8px] text-[#00f3ff] font-black uppercase tracking-widest">TR_NODE_v1.0</span>
         </div>
         <div className="flex items-center gap-2">
            <span className="text-[9px] font-mono text-[#00f3ff]">{Math.ceil(health)}%</span>
@@ -129,7 +125,7 @@ export const AdBanner: React.FC<AdBannerProps> = ({ onDestroyed, playerAtk = 1 }
           </div>
         )}
 
-        <div ref={containerRef} className="w-[320px] h-[50px] z-10" />
+        <div ref={containerRef} className="w-[320px] h-[50px] z-10 flex items-center justify-center" />
         <div onClick={handleHit} className="absolute inset-0 z-30 cursor-crosshair active:bg-[#ff00ff]/20 transition-colors" />
       </div>
 

@@ -4,7 +4,7 @@ import { AdBanner } from './AdBanner';
 
 type GameTab = 'profile' | 'expeditions' | 'items';
 type ExpeditionPhase = 'STARTING' | 'TRAVELING' | 'EXTRACTING' | 'COMPLETED' | 'FAILED';
-type AdSystem = 'HILLTOP' | 'IMA' | 'CLICKADILLA';
+type AdSystem = 'HILLTOP' | 'TWINRED' | 'CLICKADILLA';
 
 interface ExpeditionLog {
   id: string;
@@ -38,7 +38,6 @@ declare global {
 
 // Ad Configs
 const HILLTOP_VAST_URL = "https://groundedmine.com/d.mTFSzgdpGDNYvcZcGXUK/FeJm/9IuZZNUElDktPwTaYW3CNUz/YTwMNFD/ket-N/j_c/3qN/jPA/1cMuwy";
-const IMA_AD_TAG_URL = "https://youradexchange.com/video/select.php?r=10948866";
 const CLICKADILLA_VAST_URL = "https://vast.yomeno.xyz/vast?spot_id=1480488";
 const AD_WATCH_DURATION = 60; 
 
@@ -76,6 +75,7 @@ export const GameView: React.FC = () => {
   const [currentAdSystem, setCurrentAdSystem] = useState<AdSystem>('HILLTOP');
   
   const videoRef = useRef<HTMLVideoElement>(null);
+  const adContainerRef = useRef<HTMLDivElement>(null);
   const playerInstance = useRef<any>(null);
 
   const calculateTotalDuration = (level: number) => Math.max(15, 20 + (level - 1) * 4);
@@ -90,10 +90,10 @@ export const GameView: React.FC = () => {
     setVideoAdTimer(AD_WATCH_DURATION);
     setIsAdPlaying(false);
     
-    // Cycle through systems: HILLTOP -> IMA -> CLICKADILLA -> HILLTOP
+    // Cycle through systems: HILLTOP -> TWINRED -> CLICKADILLA -> HILLTOP
     setCurrentAdSystem(prev => {
-      if (prev === 'HILLTOP') return 'IMA';
-      if (prev === 'IMA') return 'CLICKADILLA';
+      if (prev === 'HILLTOP') return 'TWINRED';
+      if (prev === 'TWINRED') return 'CLICKADILLA';
       return 'HILLTOP';
     });
   };
@@ -118,7 +118,7 @@ export const GameView: React.FC = () => {
 
   // Improved Ad initialization for all systems
   useEffect(() => {
-    if (!videoAdVisible || !videoRef.current) return;
+    if (!videoAdVisible) return;
 
     // Fallback timer: if ad doesn't start in 5s, start the 60s countdown anyway
     const fallbackTimer = setTimeout(() => {
@@ -126,8 +126,29 @@ export const GameView: React.FC = () => {
       addLog("Signál nestabilní, přecházím na autonomní odpočet...", "warn");
     }, 6000);
 
+    // TwinRed initialization (Banner logic inside modal)
+    if (currentAdSystem === 'TWINRED') {
+      try {
+        if (adContainerRef.current) {
+          adContainerRef.current.innerHTML = '';
+          const ins = document.createElement('ins');
+          ins.setAttribute('data-tr-zone', '01KGSWFNQSNGZ61WTP789YSEGN');
+          const script = document.createElement('script');
+          script.type = 'text/javascript';
+          script.async = true;
+          script.src = 'https://s.ad.twinrdengine.com/adlib.js';
+          adContainerRef.current.appendChild(ins);
+          adContainerRef.current.appendChild(script);
+          setIsAdPlaying(true);
+          addLog("Inicializace TwinRed protokolu...", "info");
+        }
+      } catch (e) {
+        console.error("TwinRed injection error:", e);
+        setIsAdPlaying(true);
+      }
+    }
     // Fluid Player for HilltopAds and Clickadilla (VAST 3.0/4.0 compatible)
-    if ((currentAdSystem === 'HILLTOP' || currentAdSystem === 'CLICKADILLA') && window.fluidPlayer) {
+    else if ((currentAdSystem === 'HILLTOP' || currentAdSystem === 'CLICKADILLA') && window.fluidPlayer && videoRef.current) {
       const vastUrl = currentAdSystem === 'HILLTOP' ? HILLTOP_VAST_URL : CLICKADILLA_VAST_URL;
       try {
         playerInstance.current = window.fluidPlayer(videoRef.current, {
@@ -158,59 +179,17 @@ export const GameView: React.FC = () => {
         setIsAdPlaying(true);
       }
     } 
-    // Video.js IMA for YourAdExchange
-    else if (currentAdSystem === 'IMA' && window.videojs) {
-      try {
-        const player = window.videojs(videoRef.current, {
-          autoplay: true,
-          muted: false, 
-          controls: false,
-          fluid: true,
-          sources: [{
-            src: 'https://vjs.zencdn.net/v/oceans.mp4',
-            type: 'video/mp4'
-          }]
-        });
-
-        player.ima({
-          adTagUrl: IMA_AD_TAG_URL,
-          showControlsForAds: false,
-          debug: false
-        });
-
-        player.on('ready', () => {
-          if (player.ima && player.ima.initializeAdDisplayContainer) {
-            player.ima.initializeAdDisplayContainer();
-            player.ima.requestAds();
-          }
-        });
-
-        player.on('adserror', (e: any) => {
-          console.warn("IMA Ads Error:", e);
-          addLog("IMA Uplink error, čekám na časový limit...", "warn");
-          setIsAdPlaying(true);
-        });
-
-        playerInstance.current = player;
-        setIsAdPlaying(true);
-        addLog("Inicializace YourAdExchange IMA kanálu...", "info");
-      } catch (e) {
-        console.error("IMA setup error:", e);
-        setIsAdPlaying(true);
-      }
-    }
 
     return () => {
       clearTimeout(fallbackTimer);
       if (playerInstance.current) {
         try {
-          if (currentAdSystem === 'IMA') {
-            playerInstance.current.dispose();
-          } else {
-            playerInstance.current.destroy();
-          }
+          playerInstance.current.destroy();
         } catch(e) {}
         playerInstance.current = null;
+      }
+      if (adContainerRef.current) {
+        adContainerRef.current.innerHTML = '';
       }
     };
   }, [videoAdVisible, currentAdSystem]);
@@ -339,9 +318,13 @@ export const GameView: React.FC = () => {
                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,243,255,0.05)_0%,transparent_70%)] pointer-events-none" />
 
                <div className="w-full h-full z-10 flex items-center justify-center">
-                  <video ref={videoRef} id="my-video" className="video-js vjs-default-skin w-full h-full" playsInline>
-                    <source src="https://vjs.zencdn.net/v/oceans.mp4" type="video/mp4" />
-                  </video>
+                  {currentAdSystem !== 'TWINRED' ? (
+                    <video ref={videoRef} id="my-video" className="video-js vjs-default-skin w-full h-full" playsInline>
+                      <source src="https://vjs.zencdn.net/v/oceans.mp4" type="video/mp4" />
+                    </video>
+                  ) : (
+                    <div ref={adContainerRef} className="w-full h-full flex items-center justify-center bg-black/40" />
+                  )}
                </div>
                
                <div className="absolute bottom-0 left-0 w-full p-10 bg-gradient-to-t from-black via-black/90 to-transparent flex flex-col items-center gap-6 z-30 pointer-events-none">
@@ -377,10 +360,10 @@ export const GameView: React.FC = () => {
             </div>
 
             <div className="p-4 bg-[#050505] flex justify-between items-center border-t border-white/5 px-8">
-               <span className="text-[8px] opacity-20 uppercase tracking-[0.4em]">Protocol: {currentAdSystem === 'HILLTOP' ? 'HilltopAds_VAST' : currentAdSystem === 'IMA' ? 'VideoJS_IMA_v3' : 'Clickadilla_VAST'} | 0xDEADBEEF</span>
+               <span className="text-[8px] opacity-20 uppercase tracking-[0.4em]">Protocol: {currentAdSystem === 'HILLTOP' ? 'HilltopAds_VAST' : currentAdSystem === 'TWINRED' ? 'TwinRed_Display_v1' : 'Clickadilla_VAST'} | 0xDEADBEEF</span>
                <div className="flex gap-4">
                   <button 
-                    onClick={() => window.open(currentAdSystem === 'HILLTOP' ? 'https://hilltopads.com' : currentAdSystem === 'CLICKADILLA' ? 'https://clickadilla.com' : 'https://www.google.com/ads/publisher/', '_blank')} 
+                    onClick={() => window.open(currentAdSystem === 'HILLTOP' ? 'https://hilltopads.com' : currentAdSystem === 'CLICKADILLA' ? 'https://clickadilla.com' : 'https://twinred.com', '_blank')} 
                     className="text-[8px] uppercase tracking-widest text-[#00f3ff]/40 hover:text-white flex items-center gap-1"
                   >
                     <ExternalLink size={10} /> Manuální_Odkaz
