@@ -4,7 +4,7 @@ import { AdBanner } from './AdBanner';
 
 type GameTab = 'profile' | 'expeditions' | 'items';
 type ExpeditionPhase = 'STARTING' | 'TRAVELING' | 'EXTRACTING' | 'COMPLETED' | 'FAILED';
-type AdSystem = 'HILLTOP' | 'TWINRED' | 'CLICKADILLA';
+type AdSystem = 'HILLTOP' | 'CLICKADILLA';
 
 interface ExpeditionLog {
   id: string;
@@ -90,10 +90,9 @@ export const GameView: React.FC = () => {
     setVideoAdTimer(AD_WATCH_DURATION);
     setIsAdPlaying(false);
     
-    // Cycle through systems: HILLTOP -> TWINRED -> CLICKADILLA -> HILLTOP
+    // Cycle through systems: HILLTOP -> CLICKADILLA -> HILLTOP
     setCurrentAdSystem(prev => {
-      if (prev === 'HILLTOP') return 'TWINRED';
-      if (prev === 'TWINRED') return 'CLICKADILLA';
+      if (prev === 'HILLTOP') return 'CLICKADILLA';
       return 'HILLTOP';
     });
   };
@@ -130,39 +129,14 @@ export const GameView: React.FC = () => {
   useEffect(() => {
     if (!videoAdVisible) return;
 
-    // Fallback timer: if ad doesn't start in 5s, start the 60s countdown anyway
+    // Fallback timer: if ad doesn't start in 8s, start the 60s countdown anyway
     const fallbackTimer = setTimeout(() => {
       setIsAdPlaying(true);
       addLog("Signál nestabilní, přecházím na autonomní odpočet...", "warn");
     }, 8000);
 
-    // TwinRed initialization (Direct injection as requested)
-    if (currentAdSystem === 'TWINRED') {
-      try {
-        if (adContainerRef.current) {
-          adContainerRef.current.innerHTML = '';
-          const ins = document.createElement('ins');
-          ins.setAttribute('data-tr-zone', '01KGSWFNQSNGZ61WTP789YSEGN');
-          
-          const script = document.createElement('script');
-          script.type = 'text/javascript';
-          script.async = true;
-          script.src = 'https://s.ad.twinrdengine.com/adlib.js';
-          
-          // Place script INSIDE ins tag as per user requirement
-          ins.appendChild(script);
-          adContainerRef.current.appendChild(ins);
-          
-          setIsAdPlaying(true);
-          addLog("Inicializace TwinRed protokolu...", "info");
-        }
-      } catch (e) {
-        console.error("TwinRed injection error:", e);
-        setIsAdPlaying(true);
-      }
-    }
     // Fluid Player for HilltopAds and Clickadilla (VAST 3.0/4.0 compatible)
-    else if ((currentAdSystem === 'HILLTOP' || currentAdSystem === 'CLICKADILLA') && window.fluidPlayer && videoRef.current) {
+    if ((currentAdSystem === 'HILLTOP' || currentAdSystem === 'CLICKADILLA') && window.fluidPlayer && videoRef.current) {
       const vastUrl = currentAdSystem === 'HILLTOP' ? HILLTOP_VAST_URL : CLICKADILLA_VAST_URL;
       try {
         playerInstance.current = window.fluidPlayer(videoRef.current, {
@@ -333,13 +307,9 @@ export const GameView: React.FC = () => {
             {/* THE AD PLAYER: THIS AREA IS STRICTLY FORBIDDEN TO BE OVERLAID */}
             <div className="aspect-video bg-black relative flex items-center justify-center overflow-hidden border-y border-[#00f3ff]/10">
                <div className="w-full h-full flex items-center justify-center">
-                  {currentAdSystem !== 'TWINRED' ? (
-                    <video ref={videoRef} id="my-video" className="video-js vjs-default-skin w-full h-full" playsInline>
-                      <source src="https://vjs.zencdn.net/v/oceans.mp4" type="video/mp4" />
-                    </video>
-                  ) : (
-                    <div ref={adContainerRef} className="w-full h-full flex items-center justify-center bg-black overflow-hidden" />
-                  )}
+                  <video ref={videoRef} id="my-video" className="video-js vjs-default-skin w-full h-full" playsInline>
+                    <source src="https://vjs.zencdn.net/v/oceans.mp4" type="video/mp4" />
+                  </video>
                </div>
             </div>
 
@@ -375,9 +345,9 @@ export const GameView: React.FC = () => {
             </div>
 
             <div className="p-3 bg-[#020202] flex justify-between items-center border-t border-white/5 px-8">
-               <span className="text-[7px] opacity-10 uppercase tracking-[0.3em]">SECURE_LINK_ENCRYPTED_TR_V2</span>
+               <span className="text-[7px] opacity-10 uppercase tracking-[0.3em]">SECURE_LINK_ENCRYPTED_v2</span>
                <button 
-                  onClick={() => window.open(currentAdSystem === 'HILLTOP' ? 'https://hilltopads.com' : 'https://twinred.com', '_blank')} 
+                  onClick={() => window.open(currentAdSystem === 'HILLTOP' ? 'https://hilltopads.com' : 'https://clickadilla.com', '_blank')} 
                   className="text-[7px] uppercase tracking-widest text-[#00f3ff]/30 hover:text-white flex items-center gap-1"
                 >
                   <ExternalLink size={8} /> INFO_NODE

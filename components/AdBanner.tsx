@@ -21,34 +21,19 @@ export const AdBanner: React.FC<AdBannerProps> = ({ onDestroyed, playerAtk = 1 }
     const container = containerRef.current;
     container.innerHTML = '';
 
-    // TwinRed injection logic as requested: script inside ins tag
+    // Placeholder logic since TwinRed was removed.
+    // In a production app, you would swap this with another display ad provider.
     try {
-      const ins = document.createElement('ins');
-      ins.setAttribute('data-tr-zone', '01KGSWFNQSNGZ61WTP789YSEGN');
-      
-      const script = document.createElement('script');
-      script.type = 'text/javascript';
-      script.async = true;
-      script.src = 'https://s.ad.twinrdengine.com/adlib.js';
-      
-      script.onload = () => {
-        setTimeout(() => {
-          setIsLoading(false);
-          // Simple heuristic to check if something loaded
-          if (container.innerHTML.length < 5) {
-            setLoadError(true);
-          }
-        }, 1500);
-      };
-
-      script.onerror = () => {
+      setTimeout(() => {
         setIsLoading(false);
-        setLoadError(true);
-      };
-
-      // Critical: script MUST be child of ins
-      ins.appendChild(script);
-      container.appendChild(ins);
+        // We show a placeholder or nothing if no other provider is set.
+        if (container.innerHTML.length === 0) {
+           const placeholder = document.createElement('div');
+           placeholder.className = "text-[10px] text-white/20 uppercase tracking-widest text-center";
+           placeholder.innerText = "DATOVÁ_ANOMÁLIE_DETEKována";
+           container.appendChild(placeholder);
+        }
+      }, 1000);
     } catch (e) {
       console.error("Ad injection error:", e);
       setLoadError(true);
@@ -96,7 +81,7 @@ export const AdBanner: React.FC<AdBannerProps> = ({ onDestroyed, playerAtk = 1 }
       <div className="flex justify-between items-center mb-1 px-1">
         <div className="flex items-center gap-1">
           <Target size={10} className="text-[#00f3ff]" />
-          <span className="text-[8px] text-[#00f3ff] font-black uppercase tracking-widest">TR_NODE_v2.0</span>
+          <span className="text-[8px] text-[#00f3ff] font-black uppercase tracking-widest">ANOMALY_NODE_v3.1</span>
         </div>
         <div className="flex items-center gap-2">
            <span className="text-[9px] font-mono text-[#00f3ff]">{Math.ceil(health)}%</span>
@@ -110,7 +95,7 @@ export const AdBanner: React.FC<AdBannerProps> = ({ onDestroyed, playerAtk = 1 }
         {isLoading && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/90">
             <Loader2 className="text-[#00f3ff] animate-spin mb-1" size={16} />
-            <span className="text-[7px] text-[#00f3ff] font-black uppercase tracking-widest">Synchronizace...</span>
+            <span className="text-[7px] text-[#00f3ff] font-black uppercase tracking-widest">Skenování...</span>
           </div>
         )}
 
