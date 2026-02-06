@@ -120,7 +120,7 @@ export const GameView: React.FC = () => {
           layoutControls: {
             fillToContainer: true,
             autoPlay: true,
-            mute: true,
+            mute: false, // Changed from true to false to enable sound
             allowDownload: false,
             playbackRateControl: false,
             persistentSettings: { volume: false }
@@ -143,7 +143,7 @@ export const GameView: React.FC = () => {
       try {
         const player = window.videojs(videoRef.current, {
           autoplay: true,
-          muted: true,
+          muted: false, // Changed from true to false to enable sound
           controls: false,
           fluid: true,
           sources: [{
@@ -324,7 +324,7 @@ export const GameView: React.FC = () => {
                   </video>
                </div>
                
-               <div className="absolute bottom-0 left-0 w-full p-10 bg-gradient-to-t from-black via-black/90 to-transparent flex flex-col items-center gap-6 z-30 pointer-events-none">
+               <div className="absolute bottom-0 left-0 w-full p-10 bg-gradient-t-t from-black via-black/90 to-transparent flex flex-col items-center gap-6 z-30 pointer-events-none">
                   {videoAdTimer > 0 ? (
                     <div className="flex flex-col items-center gap-4 bg-black/80 px-12 py-6 border border-[#00f3ff]/20 backdrop-blur-md shadow-2xl pointer-events-auto">
                        <div className="flex items-center gap-6">
