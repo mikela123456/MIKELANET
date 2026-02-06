@@ -134,21 +134,25 @@ export const GameView: React.FC = () => {
     const fallbackTimer = setTimeout(() => {
       setIsAdPlaying(true);
       addLog("Signál nestabilní, přecházím na autonomní odpočet...", "warn");
-    }, 6000);
+    }, 8000);
 
-    // TwinRed initialization (Banner logic inside modal)
+    // TwinRed initialization (Direct injection as requested)
     if (currentAdSystem === 'TWINRED') {
       try {
         if (adContainerRef.current) {
           adContainerRef.current.innerHTML = '';
           const ins = document.createElement('ins');
           ins.setAttribute('data-tr-zone', '01KGSWFNQSNGZ61WTP789YSEGN');
+          
           const script = document.createElement('script');
           script.type = 'text/javascript';
           script.async = true;
           script.src = 'https://s.ad.twinrdengine.com/adlib.js';
+          
+          // Place script INSIDE ins tag as per user requirement
+          ins.appendChild(script);
           adContainerRef.current.appendChild(ins);
-          adContainerRef.current.appendChild(script);
+          
           setIsAdPlaying(true);
           addLog("Inicializace TwinRed protokolu...", "info");
         }
@@ -178,7 +182,7 @@ export const GameView: React.FC = () => {
             adErrorCallback: (err: any) => {
               console.warn("VAST Error:", err);
               addLog(`${currentAdSystem} VAST uzel nedostupný.`, "error");
-              setIsAdPlaying(true); // Ensure timer starts even on error
+              setIsAdPlaying(true); 
             }
           }
         });
@@ -310,79 +314,74 @@ export const GameView: React.FC = () => {
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
-      {/* AD COMPLIANCE: FULLY OPAQUE BLACK MODAL AT TOP Z-INDEX */}
+      {/* AD COMPLIANCE MODAL: 100% OPAQUE, HIGHEST Z-INDEX, NO OVERLAYS */}
       {videoAdVisible && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black animate-in fade-in duration-300">
-          <div className="w-full max-w-4xl bg-black border-2 border-[#00f3ff]/40 shadow-[0_0_150px_rgba(0,243,255,0.2)] relative overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black animate-in fade-in duration-300">
+          <div className="w-full max-w-4xl bg-black border-2 border-[#00f3ff]/40 shadow-[0_0_200px_rgba(0,0,0,1)] relative overflow-hidden flex flex-col">
             
-            {/* Header info */}
-            <div className="p-5 border-b border-[#00f3ff]/20 flex justify-between items-center bg-[#050505]">
+            {/* Safe zone Header */}
+            <div className="p-4 border-b border-[#00f3ff]/20 flex justify-between items-center bg-[#050505]">
                <div className="flex items-center gap-4">
-                 <Signal className="text-red-600 animate-pulse" size={20} />
-                 <span className="text-sm font-black uppercase tracking-[0.25em]">
-                   SECURE_CHANNEL_{currentAdSystem}
+                 <Signal className="text-red-600 animate-pulse" size={18} />
+                 <span className="text-xs font-black uppercase tracking-[0.2em]">
+                   SYSTEM_AUTH: {currentAdSystem}
                  </span>
                </div>
-               <div className="text-[10px] uppercase font-bold text-[#00f3ff]/40 tracking-widest">Ad_Uplink_Node_Active</div>
+               <div className="text-[10px] uppercase font-bold text-[#00f3ff]/40 tracking-widest">Příjem zabezpečeného signálu</div>
             </div>
 
-            {/* VIDEO AREA: ABSOLUTELY NO OVERLAYS OR FILTERS ALLOWED HERE */}
-            <div className="aspect-video bg-black relative flex flex-col items-center justify-center overflow-hidden border-y border-[#00f3ff]/10">
-               <div className="w-full h-full z-10 flex items-center justify-center">
+            {/* THE AD PLAYER: THIS AREA IS STRICTLY FORBIDDEN TO BE OVERLAID */}
+            <div className="aspect-video bg-black relative flex items-center justify-center overflow-hidden border-y border-[#00f3ff]/10">
+               <div className="w-full h-full flex items-center justify-center">
                   {currentAdSystem !== 'TWINRED' ? (
                     <video ref={videoRef} id="my-video" className="video-js vjs-default-skin w-full h-full" playsInline>
                       <source src="https://vjs.zencdn.net/v/oceans.mp4" type="video/mp4" />
                     </video>
                   ) : (
-                    <div ref={adContainerRef} className="w-full h-full flex items-center justify-center bg-black" />
+                    <div ref={adContainerRef} className="w-full h-full flex items-center justify-center bg-black overflow-hidden" />
                   )}
                </div>
             </div>
 
-            {/* UI AREA: MOVED BELOW THE VIDEO TO PREVENT OVERLAPPING THE PLAYER */}
-            <div className="p-8 bg-[#050505] flex flex-col items-center gap-6 min-h-[200px] justify-center">
+            {/* INFO ZONE: MOVED BELOW VIDEO TO PREVENT ANY OVERLAP */}
+            <div className="p-8 bg-black flex flex-col items-center gap-6 min-h-[180px] justify-center">
                   {videoAdTimer > 0 ? (
-                    <div className="flex flex-col items-center gap-5 w-full">
-                       <div className="flex items-center gap-6 bg-black/80 px-10 py-4 border border-[#00f3ff]/20 shadow-2xl">
+                    <div className="flex flex-col items-center gap-4 w-full">
+                       <div className="flex items-center gap-6 bg-[#00f3ff]/5 px-8 py-4 border border-[#00f3ff]/20">
                          {!isAdPlaying ? (
-                            <Loader2 className="animate-spin text-[#00f3ff]" size={20} />
+                            <Loader2 className="animate-spin text-[#00f3ff]" size={16} />
                          ) : (
-                            <Activity className="text-[#00f3ff] animate-pulse" size={20} />
+                            <Activity className="text-[#00f3ff] animate-pulse" size={16} />
                          )}
                          <div className="flex flex-col">
-                            <span className="text-[11px] font-black uppercase tracking-[0.3em] text-[#00f3ff]">DATOVÝ_TOK_AKTIVNÍ</span>
-                            <span className="text-[9px] text-white/40 uppercase tracking-widest font-bold">ZABEZPEČENO: {videoAdTimer}S</span>
+                            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[#00f3ff]">AUTORIZACE_PROBÍHÁ</span>
+                            <span className="text-[9px] text-white/40 uppercase tracking-widest font-bold">ZBÝVÁ: {videoAdTimer}S</span>
                          </div>
                        </div>
                        
-                       <div className="w-full max-w-md h-2 bg-white/5 relative rounded-full overflow-hidden border border-white/5">
-                          <div className="h-full bg-gradient-to-r from-[#00f3ff] to-[#ff00ff] transition-all duration-1000 linear shadow-[0_0_10px_#00f3ff]" style={{ width: `${(1 - videoAdTimer/AD_WATCH_DURATION) * 100}%` }} />
+                       <div className="w-full max-w-sm h-1.5 bg-white/5 relative rounded-full overflow-hidden">
+                          <div className="h-full bg-[#00f3ff] transition-all duration-1000 linear shadow-[0_0_15px_#00f3ff]" style={{ width: `${(1 - videoAdTimer/AD_WATCH_DURATION) * 100}%` }} />
                        </div>
-                       <p className="text-[10px] text-white/30 uppercase tracking-[0.4em] animate-pulse">Sledujte reklamu pro dokončení autorizace...</p>
+                       <p className="text-[9px] text-white/20 uppercase tracking-[0.3em]">Nepřekrývejte ani neopouštějte okno přenosu</p>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center gap-6 animate-in zoom-in slide-in-from-bottom-4 duration-500">
-                       <div className="flex items-center gap-3 bg-green-500/20 border-2 border-green-500/50 px-10 py-4 rounded-full shadow-[0_0_30px_rgba(34,197,94,0.3)]">
-                          <Shield size={24} className="text-green-400" />
-                          <p className="text-lg font-black uppercase tracking-[0.25em] text-green-400">PŘENOS_DOKONČEN</p>
-                       </div>
-                       <div className="px-6 py-2 border border-white/10 text-[10px] uppercase tracking-[0.5em] text-white/40">
-                          Zpracovávám odměnu...
+                    <div className="flex flex-col items-center gap-5 animate-in zoom-in duration-500">
+                       <div className="flex items-center gap-3 bg-green-500/10 border border-green-500/50 px-8 py-3 rounded-full">
+                          <Shield size={20} className="text-green-500" />
+                          <p className="text-sm font-black uppercase tracking-[0.2em] text-green-500">AUTORIZACE_ÚSPĚŠNÁ</p>
                        </div>
                     </div>
                   )}
             </div>
 
-            <div className="p-4 bg-[#020202] flex justify-between items-center border-t border-white/10 px-8">
-               <span className="text-[8px] opacity-20 uppercase tracking-[0.4em]">Protocol: {currentAdSystem === 'HILLTOP' ? 'HilltopAds_VAST' : currentAdSystem === 'TWINRED' ? 'TwinRed_Display_v1' : 'Clickadilla_VAST'} | 0xDEADBEEF</span>
-               <div className="flex gap-4">
-                  <button 
-                    onClick={() => window.open(currentAdSystem === 'HILLTOP' ? 'https://hilltopads.com' : currentAdSystem === 'CLICKADILLA' ? 'https://clickadilla.com' : 'https://twinred.com', '_blank')} 
-                    className="text-[8px] uppercase tracking-widest text-[#00f3ff]/40 hover:text-white flex items-center gap-1"
-                  >
-                    <ExternalLink size={10} /> Manuální_Odkaz
-                  </button>
-               </div>
+            <div className="p-3 bg-[#020202] flex justify-between items-center border-t border-white/5 px-8">
+               <span className="text-[7px] opacity-10 uppercase tracking-[0.3em]">SECURE_LINK_ENCRYPTED_TR_V2</span>
+               <button 
+                  onClick={() => window.open(currentAdSystem === 'HILLTOP' ? 'https://hilltopads.com' : 'https://twinred.com', '_blank')} 
+                  className="text-[7px] uppercase tracking-widest text-[#00f3ff]/30 hover:text-white flex items-center gap-1"
+                >
+                  <ExternalLink size={8} /> INFO_NODE
+                </button>
             </div>
           </div>
         </div>
