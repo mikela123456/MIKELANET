@@ -27,7 +27,7 @@ declare global {
   }
 }
 
-// Updated URL from provided source
+// Optimized VAST/VPAID Tag for BST Ads
 const VIDEO_AD_URL = "https://groundedmine.com/d.mTFSzgdpGDNYvcZcGXUK/FeJm/9IuZZNUElDktPwTaYW3CNUz/YTwMNFD/ket-N/j_c/3qN/jPA/1cMuwy";
 const AD_WATCH_DURATION = 60; 
 
@@ -56,6 +56,7 @@ export const GameView: React.FC = () => {
   const [videoAdTimer, setVideoAdTimer] = useState(0);
   const [activeCoinId, setActiveCoinId] = useState<string | null>(null);
   const [isVideoForStart, setIsVideoForStart] = useState(false);
+  const [adPlayerInitialized, setAdPlayerInitialized] = useState(false);
   
   const playerInstance = useRef<any>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -64,50 +65,68 @@ export const GameView: React.FC = () => {
     setIsVideoForStart(forStart);
     setVideoAdVisible(true);
     setVideoAdTimer(AD_WATCH_DURATION);
+    setAdPlayerInitialized(false);
   };
 
-  // Immediate Player Initialization
+  // BST / VPAID Video Player Logic
   useEffect(() => {
-    if (videoAdVisible && videoRef.current && window.fluidPlayer) {
-      // Fluid Player must be initialized once the element is in the DOM
-      const timer = setTimeout(() => {
+    if (videoAdVisible && videoRef.current && window.fluidPlayer && !adPlayerInitialized) {
+      const initTimer = setTimeout(() => {
         if (!videoRef.current) return;
         
-        playerInstance.current = window.fluidPlayer(videoRef.current, {
-          layoutControls: {
-            fillToContainer: true,
-            autoPlay: true,
-            mute: true, // Browsers require mute for autoplay
-            allowDownload: false,
-            playbackRateControl: false,
-            persistentSettings: { volume: false },
-            adProgressbarColor: '#00f3ff',
-            primaryColor: '#ff00ff',
-            controlBar: { autoHide: true, animated: true }
-          },
-          vastOptions: {
-            allowVPAID: true,
-            vpaidMode: 'insecure', // Critical for BST / VPAID scripts from HilltopAds
-            adList: [{ roll: 'preRoll', vastTag: VIDEO_AD_URL }],
-            adStartedCallback: () => console.log('AD_UPLINK_ESTABLISHED'),
-            adErrorCallback: (err: any) => console.error('AD_LINK_FAILURE', err)
-          }
-        });
-      }, 50);
+        try {
+          playerInstance.current = window.fluidPlayer(videoRef.current, {
+            layoutControls: {
+              fillToContainer: true,
+              autoPlay: true,
+              mute: true, // Required for autoplay compliance
+              allowDownload: false,
+              playbackRateControl: false,
+              persistentSettings: { volume: false },
+              adProgressbarColor: '#00f3ff',
+              primaryColor: '#ff00ff',
+              posterImage: '', 
+              controlBar: {
+                autoHide: true,
+                animated: true
+              }
+            },
+            vastOptions: {
+              allowVPAID: true,
+              vpaidMode: 'insecure', // Critical for BST/VPAID scripts
+              adList: [
+                {
+                  roll: 'preRoll',
+                  vastTag: VIDEO_AD_URL
+                }
+              ],
+              adStartedCallback: () => {
+                console.log('BST_AD_STARTED');
+              },
+              adErrorCallback: (err: any) => {
+                console.error('BST_AD_ERROR', err);
+              }
+            }
+          });
+          setAdPlayerInitialized(true);
+        } catch (e) {
+          console.error("Fluid Player init error:", e);
+        }
+      }, 150);
 
       return () => {
-        clearTimeout(timer);
+        clearTimeout(initTimer);
         if (playerInstance.current) {
           try {
             playerInstance.current.destroy();
-          } catch(e) {}
+          } catch (e) {}
           playerInstance.current = null;
         }
       };
     }
-  }, [videoAdVisible]);
+  }, [videoAdVisible, adPlayerInitialized]);
 
-  // Persistent Timer - The gatekeeper for rewards
+  // Persistent Timer
   useEffect(() => {
     let interval: number;
     if (videoAdVisible && videoAdTimer > 0) {
@@ -204,42 +223,42 @@ export const GameView: React.FC = () => {
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
-      {/* BST VIDEO MODAL - FINAL STABILITY CONFIG */}
+      {/* BST VIDEO MODAL */}
       {videoAdVisible && (
         <div className="fixed inset-0 z-[1000] flex flex-col bg-black animate-in fade-in duration-300">
           
-          {/* HEADER (High fidelity to screenshot description) */}
-          <div className="w-full h-16 bg-black flex items-center justify-between px-8 shrink-0 border-b border-white/5 shadow-[0_4px_20px_rgba(0,0,0,1)] z-50">
+          {/* HEADER AREA */}
+          <div className="w-full h-16 bg-black flex items-center justify-between px-8 shrink-0 border-b border-white/5 relative z-50">
             <div className="flex items-center gap-4">
-              <div className="w-2.5 h-2.5 rounded-full bg-[#ff00ff] shadow-[0_0_12px_#ff00ff] animate-pulse" />
+              <div className="w-3 h-3 rounded-full bg-[#ff00ff] shadow-[0_0_15px_#ff00ff] animate-pulse" />
               <div className="flex flex-col">
-                <span className="text-[10px] text-[#00f3ff] font-black tracking-[0.25em] uppercase leading-none mb-1">
+                <span className="text-[10px] text-[#00f3ff] font-black tracking-[0.3em] uppercase leading-none mb-1">
                   UPLINK_ACTIVE // AUTORIZACE STARTU
                 </span>
-                <span className="text-[7px] text-white/20 uppercase tracking-[0.1em]">Protocol: VPAID_SECURE_0x07</span>
+                <span className="text-[8px] text-white/20 uppercase tracking-[0.1em]">SECURE_TUNNEL: ESTABLISHED</span>
               </div>
             </div>
             
             <div className="flex flex-col items-end">
                <span className="text-[8px] text-white/40 uppercase tracking-[0.2em] mb-1">Verifikace spojení</span>
-               <span className="text-3xl font-black text-[#00f3ff] tabular-nums neon-glow-cyan leading-none drop-shadow-[0_0_10px_rgba(0,243,255,0.5)]">
+               <span className="text-3xl font-black text-[#00f3ff] tabular-nums neon-glow-cyan leading-none">
                  {videoAdTimer}s
                </span>
             </div>
           </div>
 
-          {/* MAIN PLAYER AREA (Pure for VPAID compatibility) */}
-          <div className="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
-             {/* Invisible status indicators */}
-             <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-5">
-                <Signal size={300} className="animate-pulse" />
+          {/* PLAYER CONTAINER */}
+          <div className="flex-1 relative bg-[#050505] flex items-center justify-center overflow-hidden">
+             {/* Invisible status markers for aesthetic */}
+             <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03]">
+                <Cpu size={400} />
              </div>
 
-             <div className="w-full h-full relative z-10">
+             <div className="w-full h-full relative z-10 bg-black">
                 <video 
                   ref={videoRef}
-                  id="fluid-player-bst"
-                  className="w-full h-full object-contain"
+                  id="fluid-player-bst-target"
+                  className="w-full h-full"
                   autoPlay
                   muted
                   playsInline
@@ -247,31 +266,46 @@ export const GameView: React.FC = () => {
                   <source src="" type="video/mp4" />
                 </video>
              </div>
+             
+             {/* Fallback loader if ad is slow */}
+             {!adPlayerInitialized && (
+               <div className="absolute inset-0 z-0 flex flex-col items-center justify-center space-y-4">
+                  <RefreshCw className="animate-spin text-[#00f3ff]" size={40} />
+                  <span className="text-[10px] text-[#00f3ff] uppercase tracking-[0.5em] font-black animate-pulse">Syncing Video Stream...</span>
+               </div>
+             )}
           </div>
 
-          {/* FOOTER (Action Bar) */}
-          <div className="w-full h-16 bg-black flex items-center justify-center shrink-0 border-t border-white/5 relative z-50">
+          {/* ACTION BAR */}
+          <div className="w-full h-20 bg-black flex items-center justify-center shrink-0 border-t border-white/5 relative z-50">
              {videoAdTimer > 0 ? (
-                <div className="flex items-center gap-3">
-                  <RefreshCw size={14} className="text-[#00f3ff] animate-spin" />
-                  <span className="text-[10px] text-white/60 uppercase tracking-[0.4em] font-bold animate-pulse">
+                <div className="flex items-center gap-4">
+                  <div className="w-2 h-2 bg-[#ff00ff] animate-ping" />
+                  <span className="text-[10px] text-white/50 uppercase tracking-[0.4em] font-bold">
                     SLEDUJTE REKLAMU PRO ZÍSKÁNÍ ODMĚNY...
                   </span>
                 </div>
              ) : (
-                <div className="flex items-center gap-6">
+                <div className="flex items-center gap-8 w-full justify-center">
                   <button 
                     onClick={claimVideoReward}
-                    className="px-20 py-3 bg-[#00f3ff] text-black font-black uppercase tracking-[0.6em] text-xs hover:bg-white transition-all shadow-[0_0_40px_rgba(0,243,255,0.7)] active:scale-95"
+                    className="px-24 py-4 bg-[#00f3ff] text-black font-black uppercase tracking-[0.8em] text-xs hover:bg-white transition-all shadow-[0_0_50px_rgba(0,243,255,0.6)] animate-in slide-in-from-bottom-4"
                   >
                     POTVRDIT PŘÍJEM
                   </button>
-                  <button onClick={() => setVideoAdVisible(false)} className="absolute right-8 text-white/20 hover:text-red-500 transition-colors">
-                    <X size={24}/>
+                  <button 
+                    onClick={() => setVideoAdVisible(false)}
+                    className="p-3 border border-white/10 text-white/20 hover:text-red-500 transition-colors"
+                  >
+                    <X size={20}/>
                   </button>
                 </div>
              )}
           </div>
+
+          {/* Side accents */}
+          <div className="absolute top-1/2 left-4 h-32 w-[1px] bg-[#ff00ff]/20 -translate-y-1/2" />
+          <div className="absolute top-1/2 right-4 h-32 w-[1px] bg-[#ff00ff]/20 -translate-y-1/2" />
         </div>
       )}
 
@@ -446,7 +480,7 @@ export const GameView: React.FC = () => {
         @keyframes grid-scroll { from { background-position: 0 0; } to { background-position: 80px 80px; } }
         .neon-glow-cyan { text-shadow: 0 0 10px #00f3ff; }
         
-        /* BST Player Overrides for maximum visibility and branding */
+        /* BST Player Integration */
         .fluid_video_wrapper {
           width: 100% !important;
           height: 100% !important;
@@ -457,12 +491,13 @@ export const GameView: React.FC = () => {
           background: #000 !important;
         }
         .fluid_controls_container {
-          background: linear-gradient(transparent, rgba(0, 0, 0, 0.8)) !important;
+          background: linear-gradient(transparent, rgba(0, 0, 0, 0.9)) !important;
         }
         .fluid_ad_countdown {
           color: #00f3ff !important;
           font-family: 'JetBrains Mono', monospace !important;
           font-weight: bold !important;
+          text-shadow: 0 0 5px #00f3ff;
         }
       `}</style>
     </div>
