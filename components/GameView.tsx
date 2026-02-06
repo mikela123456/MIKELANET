@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { User, Zap, Compass, Truck, Timer, Trophy, Shield, Activity, Clock, Database, PlayCircle, Lock, Signal, Sword, Cpu, Wifi, RefreshCw, AlertTriangle, Play, LogOut } from 'lucide-react';
+import { User, Zap, Compass, Truck, Timer, Trophy, Shield, Activity, Clock, Database, PlayCircle, Lock, Signal, Sword, Cpu, Wifi, RefreshCw, AlertTriangle, Play, LogOut, Database as MiningIcon } from 'lucide-react';
 
 // Add missing interfaces to fix TypeScript errors
 interface UpgradeItem {
@@ -323,11 +323,29 @@ export const GameView: React.FC = () => {
           <div className="flex flex-col h-full animate-in fade-in duration-700 bg-[#050505]">
             <div className="px-12 py-6 border-b border-[#00f3ff]/20 bg-black flex justify-between items-center z-10 shadow-2xl">
               <div className="flex items-center gap-10">
-                <div className="space-y-1">
-                  <span className="text-[8px] text-[#00f3ff]/40 uppercase font-black block tracking-widest">EXP_SESSION_ID</span>
-                  <span className="text-xl font-black text-white italic uppercase tracking-[0.2em]">0x{expeditionLevel.toString(16).toUpperCase()}</span>
+                {/* 
+                   DYNAMICKÝ MINING PANEL S GLITCH ANIMACÍ 
+                   Nahrazuje statické EXP_SESSION_ID
+                */}
+                <div className="relative group/mining bg-[#00f3ff]/5 border border-[#00f3ff]/10 px-4 py-1.5 rounded-sm">
+                   <div className="absolute inset-0 bg-[#00f3ff]/10 opacity-0 group-hover/mining:opacity-100 transition-opacity pointer-events-none" />
+                   <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                         <div className="w-1.5 h-1.5 rounded-full bg-[#00f3ff] animate-pulse" />
+                         <span className="text-[9px] text-[#00f3ff] font-black uppercase tracking-[0.3em] glitch-text" data-text="MK_MINING_LINK">MK_MINING_LINK</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                         <MiningIcon size={12} className="text-[#00f3ff]/60" />
+                         <span className="text-xl font-black text-white italic tracking-tighter tabular-nums">
+                            {30 - (elapsedTime % 30)}S <span className="text-[10px] text-[#00f3ff]/40 not-italic tracking-widest uppercase ml-1">DO_PAYOUT</span>
+                         </span>
+                      </div>
+                   </div>
+                   {/* Spodní progress bar mining cyklu */}
+                   <div className="absolute bottom-0 left-0 h-[2px] bg-[#00f3ff] shadow-[0_0_10px_#00f3ff]" style={{ width: `${(elapsedTime % 30 / 30) * 100}%` }} />
                 </div>
-                <div className="h-8 w-px bg-white/10" />
+
+                <div className="h-10 w-px bg-white/10" />
                 <div className="flex flex-col">
                    <span className="text-[8px] text-[#ff00ff]/40 uppercase font-black tracking-widest">REBOOT_SYNC_CLOCK</span>
                    <div className="flex items-center gap-2">
@@ -388,7 +406,7 @@ export const GameView: React.FC = () => {
                            <span className="text-[11px] font-black uppercase tracking-[0.5em] text-[#00f3ff]">UPLINK_SYSTEM_v12.2</span>
                         </div>
                         <div className="flex gap-4 text-[#00f3ff]/40 text-[9px] font-black uppercase tracking-widest">
-                           REWARD_TIMER: {30 - (elapsedTime % 30)}s | PARTNER_{partnerIndex + 1}/3
+                           REWARD_BLOCK: 4 MK | PARTNER_{partnerIndex + 1}/3
                         </div>
                      </div>
 
@@ -575,6 +593,42 @@ export const GameView: React.FC = () => {
         .animate-loading-bar { animation: loading-bar 4.5s infinite linear; }
         .neon-glow-cyan { text-shadow: 0 0 15px #00f3ff, 0 0 30px #00f3ff; }
         .neon-glow-pink { text-shadow: 0 0 15px #ff00ff, 0 0 30px #ff00ff; }
+
+        /* Glitch Animation for Mining Panel */
+        @keyframes glitch {
+          0% { transform: translate(0); text-shadow: -2px 0 #ff00ff, 2px 0 #00f3ff; }
+          25% { transform: translate(-1px, 1px); }
+          50% { transform: translate(1px, -1px); text-shadow: 2px 0 #ff00ff, -2px 0 #00f3ff; }
+          75% { transform: translate(-1px, -1px); }
+          100% { transform: translate(0); text-shadow: -2px 0 #ff00ff, 2px 0 #00f3ff; }
+        }
+        .glitch-text {
+          position: relative;
+          display: inline-block;
+          animation: glitch 3s infinite linear alternate-reverse;
+        }
+        .glitch-text::before,
+        .glitch-text::after {
+          content: attr(data-text);
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          opacity: 0.8;
+        }
+        .glitch-text::before {
+          animation: glitch 1.5s infinite linear alternate-reverse;
+          color: #ff00ff;
+          z-index: -1;
+          left: -2px;
+        }
+        .glitch-text::after {
+          animation: glitch 2s infinite linear alternate-reverse;
+          color: #00f3ff;
+          z-index: -2;
+          left: 2px;
+        }
       `}</style>
     </div>
   );
