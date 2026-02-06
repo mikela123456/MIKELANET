@@ -30,9 +30,8 @@ const HILLTOP_VAST_URL = "https://groundedmine.com/d.mTFSzgdpGDNYvcZcGXUK/FeJm/9
 const CLICKADILLA_VAST_URL = "https://vast.yomeno.xyz/vast?spot_id=1480488";
 const ONCLICKA_VAST_URL = "https://bid.onclckstr.com/vast?spot_id=6109953";
 
-// UPOZORNĚNÍ: YouTube link (https://youtu.be/Yn15g_3J1JA) nelze použít v tagu <video> přímo s VAST přehrávačem.
-// Používáme stabilní MP4 stream, který simuluje požadovaný obsah v rámci AFK smyčky.
-const CONTENT_VIDEO_URL = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+// Požadovaný YouTube odkaz
+const YOUTUBE_ID = "Yn15g_3J1JA";
 
 export const GameView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<GameTab>('profile');
@@ -46,18 +45,16 @@ export const GameView: React.FC = () => {
     { id: 'tm', name: 'Forging Modul', icon: Timer, level: 1, baseCost: 60, desc: 'Zvyšuje výnos MIKELA z každé mise.' },
   ]);
 
-  // Expedition states
   const [activeExpedition, setActiveExpedition] = useState(false);
   const [phase, setPhase] = useState<ExpeditionPhase>('COMBAT');
-  const [timeLeft, setTimeLeft] = useState(180); // 3 minutes total
+  const [timeLeft, setTimeLeft] = useState(180); 
   const [logs, setLogs] = useState<ExpeditionLog[]>([]);
   
-  // AFK Loop states
   const [currentAdSystem, setCurrentAdSystem] = useState<AdSystem>('HILLTOP');
   const [rotationKey, setRotationKey] = useState(0);
   const [cycleCountdown, setCycleCountdown] = useState(60);
   const [isAdPlaying, setIsAdPlaying] = useState(false);
-  const [isReloading, setIsReloading] = useState(false);
+  const [showYoutube, setShowYoutube] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<any>(null);
@@ -71,10 +68,10 @@ export const GameView: React.FC = () => {
     setActiveExpedition(true);
     setPhase('COMBAT');
     setLogs([]);
-    setRotationKey(0);
+    setRotationKey(Date.now());
     setCycleCountdown(60);
     addLog(`Navazování spojení se Sektorem 0x${expeditionLevel.toString(16).toUpperCase()}`, 'info');
-    addLog(`Striktní 60s AFK-Mining cyklus aktivován.`, 'warn');
+    addLog(`Striktní 60s Ad-Rotation aktivována. Zvuk zapnut.`, 'warn');
   };
 
   const finishExpedition = () => {
@@ -88,14 +85,14 @@ export const GameView: React.FC = () => {
     setPhase('COMPLETED');
     addLog(`Operace úspěšná! Fragmenty zajištěny: +${totalReward} MK`, 'success');
     
-    // Cleanup player
+    document.body.classList.remove('ad-playing');
     if (playerRef.current) {
         try { playerRef.current.destroy(); } catch(e) {}
         playerRef.current = null;
     }
   };
 
-  // Rotation Logic
+  // Rotation & Player Lifecycle
   useEffect(() => {
     if (!activeExpedition || phase === 'COMPLETED') return;
 
@@ -105,20 +102,19 @@ export const GameView: React.FC = () => {
       ONCLICKA: ONCLICKA_VAST_URL
     };
 
-    const handleNextNode = () => {
-      setIsReloading(true);
-      addLog(`60s interval vypršel. Re-inicializace přenosového uzlu...`, 'info');
+    const handleRotation = () => {
+      // Cleanup before reset
+      document.body.classList.remove('ad-playing');
+      setIsAdPlaying(false);
+      setShowYoutube(false);
       
-      setTimeout(() => {
-        setCurrentAdSystem(prev => {
-          if (prev === 'HILLTOP') return 'CLICKADILLA';
-          if (prev === 'CLICKADILLA') return 'ONCLICKA';
-          return 'HILLTOP';
-        });
-        setRotationKey(k => k + 1);
-        setCycleCountdown(60);
-        setIsReloading(false);
-      }, 800);
+      setCurrentAdSystem(prev => {
+        if (prev === 'HILLTOP') return 'CLICKADILLA';
+        if (prev === 'CLICKADILLA') return 'ONCLICKA';
+        return 'HILLTOP';
+      });
+      setRotationKey(Date.now());
+      setCycleCountdown(60);
     };
 
     const initFluid = () => {
@@ -134,7 +130,7 @@ export const GameView: React.FC = () => {
           layoutControls: {
             fillToContainer: true,
             autoPlay: true,
-            mute: true,
+            mute: false, // Zvuk vždy zapnut
             allowDownload: false,
             playbackRateControl: false,
             persistentSettings: { volume: false },
@@ -146,21 +142,26 @@ export const GameView: React.FC = () => {
             adList: [{ roll: 'preRoll', vastTag: vastUrls[currentAdSystem] }],
             adStartedCallback: () => {
               setIsAdPlaying(true);
-              addLog(`Uzel ${currentAdSystem}: Autorizační reklama spuštěna.`, 'info');
+              document.body.classList.add('ad-playing'); // Skryje filtry webu
+              addLog(`Uzel ${currentAdSystem}: Reklama hraje (UNMUTED).`, 'info');
             },
             adFinishedCallback: () => {
               setIsAdPlaying(false);
-              addLog(`Uzel ${currentAdSystem} ověřen. Dekryptuji video proud...`, 'success');
+              document.body.classList.remove('ad-playing');
+              setShowYoutube(true);
+              addLog(`Uzel ${currentAdSystem} ověřen. Spouštím video stream...`, 'success');
             },
             adErrorCallback: (err: any) => {
               console.warn("VAST_ERROR:", err);
               setIsAdPlaying(false);
-              addLog(`Uzel ${currentAdSystem}: Chyba typu in-stream (Unknown type). Pokračuji v přenosu...`, 'error');
+              document.body.classList.remove('ad-playing');
+              setShowYoutube(true);
+              addLog(`Uzel ${currentAdSystem}: Reklama nedostupná. Přeskočeno.`, 'error');
             }
           }
         });
       } catch (e) {
-        console.error("FATAL_PLAYER_INIT:", e);
+        console.error("PLAYER_RESET_ERROR:", e);
       }
     };
 
@@ -169,7 +170,7 @@ export const GameView: React.FC = () => {
     const ticker = setInterval(() => {
       setCycleCountdown(prev => {
         if (prev <= 1) {
-          handleNextNode();
+          handleRotation();
           return 60;
         }
         return prev - 1;
@@ -178,6 +179,7 @@ export const GameView: React.FC = () => {
 
     return () => {
       clearInterval(ticker);
+      document.body.classList.remove('ad-playing');
       if (playerRef.current) {
         try { playerRef.current.destroy(); } catch(e) {}
         playerRef.current = null;
@@ -185,11 +187,11 @@ export const GameView: React.FC = () => {
     };
   }, [activeExpedition, rotationKey, currentAdSystem, phase]);
 
-  // Global Expedition Timer
+  // Mission Progress
   useEffect(() => {
     if (!activeExpedition || timeLeft <= 0 || phase === 'COMPLETED') return;
 
-    const missionClock = setInterval(() => {
+    const timer = setInterval(() => {
       setTimeLeft(prev => {
         const next = prev - 1;
         const progress = ((180 - next) / 180) * 100;
@@ -206,7 +208,7 @@ export const GameView: React.FC = () => {
       });
     }, 1000);
 
-    return () => clearInterval(missionClock);
+    return () => clearInterval(timer);
   }, [activeExpedition, timeLeft]);
 
   const progressPercent = useMemo(() => Math.floor(((180 - timeLeft) / 180) * 100), [timeLeft]);
@@ -214,7 +216,6 @@ export const GameView: React.FC = () => {
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
-      {/* Sidebar Navigation */}
       <aside className="w-20 md:w-64 border-r border-white/5 bg-black/60 flex flex-col py-8 z-20 backdrop-blur-md">
         <div className="mb-14 flex flex-col items-center gap-3">
           <Database className="text-[#00f3ff] animate-pulse" size={28} />
@@ -241,7 +242,7 @@ export const GameView: React.FC = () => {
       <main className="flex-1 relative flex flex-col overflow-hidden">
         {activeExpedition ? (
           <div className="flex flex-col h-full animate-in fade-in duration-700 bg-[#050505]">
-            {/* Mission HUD */}
+            {/* HUD */}
             <div className="px-12 py-6 border-b border-[#00f3ff]/20 bg-black flex justify-between items-center z-10 shadow-2xl">
               <div className="flex items-center gap-10">
                 <div className="space-y-1">
@@ -278,43 +279,48 @@ export const GameView: React.FC = () => {
                   <div className="absolute inset-0 tactical-grid opacity-5 pointer-events-none" />
                   
                   {/* VIDEO PLAYER ZONE */}
-                  <div className="w-full max-w-4xl mx-auto flex flex-col border-2 border-[#00f3ff]/30 bg-black shadow-[0_0_100px_rgba(0,0,0,1)] relative z-10 rounded-sm overflow-hidden">
+                  <div className="w-full max-w-4xl mx-auto flex flex-col border-2 border-[#00f3ff]/30 bg-black shadow-[0_0_100px_rgba(0,0,0,1)] relative z-50 rounded-sm overflow-hidden">
                      <div className="bg-[#0a0a0a] p-2 flex justify-between items-center border-b border-white/5">
                         <div className="flex items-center gap-2">
                            <Activity size={12} className="text-red-500 animate-pulse" />
                            <span className="text-[8px] uppercase font-bold tracking-widest text-[#00f3ff]/60 italic">
-                             {isAdPlaying ? 'MANDATORY_VAST_DECRYPT' : 'DATA_FLOW_VERIFIED'}
+                             {isAdPlaying ? 'MANDATORY_VAST_DECRYPT (SOUND ON)' : 'DATA_FLOW_VERIFIED'}
                            </span>
                         </div>
                         <div className="flex items-center gap-2 text-[#00f3ff] text-[8px] font-black uppercase tracking-widest animate-pulse">
                            <RefreshCw size={10} className="animate-spin" /> CYCLE_RELOAD: {cycleCountdown}s
                         </div>
                      </div>
-                     <div className="aspect-video bg-[#000] flex items-center justify-center relative">
-                        {isReloading && (
-                          <div className="absolute inset-0 z-[100] bg-black flex flex-col items-center justify-center gap-4 animate-in fade-in">
-                            <Loader2 className="text-[#00f3ff] animate-spin" size={48} />
-                            <span className="text-xs font-black uppercase tracking-[0.5em] animate-pulse">Switching_Node...</span>
-                          </div>
+                     <div className="aspect-video bg-[#000] flex items-center justify-center relative overflow-hidden">
+                        {/* YouTube Embed se zobrazí po reklamě */}
+                        {showYoutube && (
+                          <iframe 
+                            className="absolute inset-0 w-full h-full z-50"
+                            src={`https://www.youtube.com/embed/${YOUTUBE_ID}?autoplay=1&mute=0&controls=0&modestbranding=1&rel=0`}
+                            title="Content Video"
+                            frameBorder="0"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                          />
                         )}
+                        
+                        {/* Fluid Player pro reklamy */}
                         <video 
                           key={rotationKey}
                           ref={videoRef} 
-                          className="video-js vjs-default-skin w-full h-full" 
+                          className={`video-js vjs-default-skin w-full h-full ${showYoutube ? 'opacity-0' : 'opacity-100'}`} 
                           playsInline 
-                          muted 
                         >
-                           <source src={CONTENT_VIDEO_URL} type="video/mp4" />
+                           <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" type="video/mp4" />
                         </video>
                      </div>
                   </div>
 
-                  {/* TACTICAL COMBAT MONITOR */}
                   <div className="w-full max-w-4xl mx-auto flex-1 border border-[#00f3ff]/20 bg-black/60 p-8 flex flex-col gap-8 overflow-hidden relative shadow-inner rounded-sm">
                      <div className="flex justify-between items-center border-b border-[#00f3ff]/10 pb-4">
                         <div className="flex items-center gap-4">
                            <Sword size={22} className={phase === 'COMBAT' ? 'text-red-600 animate-bounce' : 'text-[#00f3ff]/10'} />
-                           <span className="text-[11px] font-black uppercase tracking-[0.5em] text-[#00f3ff]">SYSTEM_INTEGRITY_v6.0</span>
+                           <span className="text-[11px] font-black uppercase tracking-[0.5em] text-[#00f3ff]">SYSTEM_INTEGRITY_v6.5</span>
                         </div>
                         <div className="flex gap-4">
                            <div className="flex items-center gap-2">
@@ -355,7 +361,7 @@ export const GameView: React.FC = () => {
                            </div>
                         )}
                         {phase === 'COMPLETED' && (
-                           <div className="absolute inset-0 bg-black/98 z-50 flex flex-col items-center justify-center p-16 text-center border-4 border-[#00f3ff]/10">
+                           <div className="absolute inset-0 bg-black/98 z-[100] flex flex-col items-center justify-center p-16 text-center border-4 border-[#00f3ff]/10">
                               <Trophy size={180} className="text-[#00f3ff] neon-glow-cyan animate-bounce mb-12" />
                               <h2 className="text-8xl font-black italic uppercase tracking-tighter text-white mb-10 neon-glow-cyan">MIS_COMPLETED</h2>
                               <button onClick={() => setActiveExpedition(false)} className="px-40 py-14 bg-[#00f3ff] text-black font-black uppercase tracking-[1.5em] hover:bg-white transition-all shadow-[0_0_60px_rgba(0,243,255,0.4)]">EXIT_UPLINK</button>
@@ -379,7 +385,7 @@ export const GameView: React.FC = () => {
                <div className="w-80 border-l border-white/5 bg-black/80 flex flex-col p-8 gap-6 z-10 backdrop-blur-3xl shadow-2xl">
                   <div className="flex items-center gap-3 border-b border-[#00f3ff]/30 pb-4">
                      <Activity size={20} className="text-[#00f3ff]" />
-                     <span className="text-[12px] font-black uppercase tracking-[0.5em] text-[#00f3ff]">EVENT_STREAM_v6.0</span>
+                     <span className="text-[12px] font-black uppercase tracking-[0.5em] text-[#00f3ff]">EVENT_STREAM_v6.5</span>
                   </div>
                   <div className="flex-1 overflow-y-auto space-y-7 custom-scrollbar pr-3">
                      {logs.map(log => (
