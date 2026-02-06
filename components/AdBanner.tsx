@@ -21,7 +21,7 @@ export const AdBanner: React.FC<AdBannerProps> = ({ onDestroyed, playerAtk = 1 }
     const container = containerRef.current;
     container.innerHTML = '';
 
-    // TwinRed injection logic
+    // TwinRed injection logic as requested: script inside ins tag
     try {
       const ins = document.createElement('ins');
       ins.setAttribute('data-tr-zone', '01KGSWFNQSNGZ61WTP789YSEGN');
@@ -34,11 +34,11 @@ export const AdBanner: React.FC<AdBannerProps> = ({ onDestroyed, playerAtk = 1 }
       script.onload = () => {
         setTimeout(() => {
           setIsLoading(false);
-          // Check if banner loaded something
+          // Simple heuristic to check if something loaded
           if (container.innerHTML.length < 5) {
             setLoadError(true);
           }
-        }, 1200);
+        }, 1500);
       };
 
       script.onerror = () => {
@@ -46,8 +46,9 @@ export const AdBanner: React.FC<AdBannerProps> = ({ onDestroyed, playerAtk = 1 }
         setLoadError(true);
       };
 
+      // Critical: script MUST be child of ins
+      ins.appendChild(script);
       container.appendChild(ins);
-      container.appendChild(script);
     } catch (e) {
       console.error("Ad injection error:", e);
       setLoadError(true);
@@ -95,7 +96,7 @@ export const AdBanner: React.FC<AdBannerProps> = ({ onDestroyed, playerAtk = 1 }
       <div className="flex justify-between items-center mb-1 px-1">
         <div className="flex items-center gap-1">
           <Target size={10} className="text-[#00f3ff]" />
-          <span className="text-[8px] text-[#00f3ff] font-black uppercase tracking-widest">TR_NODE_v1.0</span>
+          <span className="text-[8px] text-[#00f3ff] font-black uppercase tracking-widest">TR_NODE_v2.0</span>
         </div>
         <div className="flex items-center gap-2">
            <span className="text-[9px] font-mono text-[#00f3ff]">{Math.ceil(health)}%</span>
@@ -109,18 +110,18 @@ export const AdBanner: React.FC<AdBannerProps> = ({ onDestroyed, playerAtk = 1 }
         {isLoading && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/90">
             <Loader2 className="text-[#00f3ff] animate-spin mb-1" size={16} />
-            <span className="text-[7px] text-[#00f3ff] font-black uppercase">Syncing...</span>
+            <span className="text-[7px] text-[#00f3ff] font-black uppercase tracking-widest">Synchronizace...</span>
           </div>
         )}
 
         {loadError && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-red-950/40 backdrop-blur-sm p-1 text-center">
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-red-950/20 backdrop-blur-sm p-1 text-center">
             <ShieldAlert className="text-red-500 mb-1" size={14} />
             <button 
               onClick={(e) => { e.stopPropagation(); setRetryKey(k => k + 1); }}
-              className="text-[6px] bg-white/10 px-2 py-0.5 rounded hover:bg-white/20 flex items-center gap-1 uppercase font-bold"
+              className="text-[6px] bg-white/10 px-2 py-0.5 rounded hover:bg-white/20 flex items-center gap-1 uppercase font-bold text-white"
             >
-              <RefreshCw size={8} /> Retry
+              <RefreshCw size={8} /> Opakovat
             </button>
           </div>
         )}
