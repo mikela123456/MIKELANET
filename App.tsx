@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { TerminalHeader } from './components/TerminalHeader';
 import { GlitchEye } from './components/GlitchEye';
@@ -8,6 +7,7 @@ import { AuthModal } from './components/AuthModal';
 import { Navigation } from './components/Navigation';
 import { Dashboard } from './components/Dashboard';
 import { GameView } from './components/GameView';
+import { AgeGate } from './components/AgeGate';
 
 type ViewState = 'LANDING' | 'DASHBOARD' | 'GAME';
 
@@ -15,6 +15,7 @@ const App: React.FC = () => {
   const [time, setTime] = useState<string>(new Date().toLocaleTimeString('cs-CZ', { hour12: false }));
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
+  const [showAgeGate, setShowAgeGate] = useState(false);
   const [currentView, setCurrentView] = useState<ViewState>('LANDING');
 
   useEffect(() => {
@@ -37,6 +38,11 @@ const App: React.FC = () => {
 
   const enterGame = () => {
     setCurrentView('GAME');
+  };
+
+  const handleVerifyAge = () => {
+    setShowAgeGate(false);
+    setShowAuth(true);
   };
 
   return (
@@ -73,7 +79,7 @@ const App: React.FC = () => {
           <SystemStatus time={time} />
           <div className="mt-8 flex flex-col items-center animate-bounce-slow">
              <button 
-                onClick={() => setShowAuth(true)}
+                onClick={() => setShowAgeGate(true)}
                 className="group relative px-10 py-3 overflow-hidden border-2 border-[#00f3ff] bg-black/40 backdrop-blur-sm transition-transform active:scale-95"
               >
                 <div className="absolute inset-0 w-1/4 bg-[#00f3ff]/10 group-hover:w-full transition-all duration-300" />
@@ -85,6 +91,13 @@ const App: React.FC = () => {
               </button>
           </div>
         </main>
+      )}
+
+      {showAgeGate && (
+        <AgeGate 
+          onVerify={handleVerifyAge}
+          onCancel={() => setShowAgeGate(false)}
+        />
       )}
 
       {showAuth && !isLoggedIn && (
