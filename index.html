@@ -58,6 +58,13 @@
             pointer-events: none;
             z-index: 60;
         }
+        
+        /* Ad Compliance: Hide overlays when ad is playing */
+        body.ad-playing .scanline,
+        body.ad-playing .crt-overlay {
+            display: none !important;
+        }
+
         .neon-glow-pink {
             text-shadow: 0 0 10px #ff00ff, 0 0 20px #ff00ff, 0 0 40px #ff00ff;
         }
