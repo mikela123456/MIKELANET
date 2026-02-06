@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Sword, Package, Zap, Compass, Truck, Timer, Trophy, Shield, AlertTriangle, ChevronRight, Activity, Clock, Loader2, Coins, X, Terminal, Database, ShieldAlert as AlertIcon, PlayCircle, Lock, ExternalLink, RefreshCw, Eye, Signal, Volume2 } from 'lucide-react';
 import { AdBanner } from './AdBanner';
@@ -36,7 +35,7 @@ declare global {
 
 // HilltopAds VAST Tag URL
 const VIDEO_AD_URL = "https://groundedmine.com/d.mTFSzgdpGDNYvcZcGXUK/FeJm/9IuZZNUElDktPwTaYW3CNUz/YTwMNFD/ket-N/j_c/3qN/jPA/1cMuwy";
-const AD_WATCH_DURATION = 15; 
+const AD_WATCH_DURATION = 60; 
 
 export const GameView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<GameTab>('profile');
@@ -83,6 +82,24 @@ export const GameView: React.FC = () => {
     setVideoAdVisible(true);
     setVideoAdTimer(AD_WATCH_DURATION);
     setIsAdPlaying(false);
+  };
+
+  const claimVideoReward = () => {
+    if (videoAdTimer > 0) return;
+    if (isVideoForStart) {
+      startExpedition();
+    } else if (activeCoinId) {
+      const coin = coins.find(c => c.id === activeCoinId);
+      if (coin) {
+        setMikelaReserves(prev => prev + coin.value);
+        setCoins(prev => prev.filter(c => c.id !== activeCoinId));
+        addLog(`Dekódováno: +${coin.value} MK`, 'success');
+      }
+      setVideoAdVisible(false);
+      setActiveCoinId(null);
+    } else {
+      setVideoAdVisible(false);
+    }
   };
 
   useEffect(() => {
@@ -135,6 +152,12 @@ export const GameView: React.FC = () => {
       timer = window.setInterval(() => {
         setVideoAdTimer(prev => prev - 1);
       }, 1000);
+    } else if (videoAdVisible && isAdPlaying && videoAdTimer === 0) {
+      // Automatic claim and close when timer reaches 0
+      const autoCloseTimeout = setTimeout(() => {
+        claimVideoReward();
+      }, 2000);
+      return () => clearTimeout(autoCloseTimeout);
     }
     return () => clearInterval(timer);
   }, [videoAdVisible, isAdPlaying, videoAdTimer]);
@@ -172,27 +195,6 @@ export const GameView: React.FC = () => {
         setActiveAds(prev => [...prev, { id: Date.now() }]);
       }
     }, 2500);
-  };
-
-  const handleCoinClick = (id: string) => {
-    setActiveCoinId(id);
-    openVideoAd(false);
-  };
-
-  const claimVideoReward = () => {
-    if (videoAdTimer > 0) return;
-    if (isVideoForStart) {
-      startExpedition();
-    } else if (activeCoinId) {
-      const coin = coins.find(c => c.id === activeCoinId);
-      if (coin) {
-        setMikelaReserves(prev => prev + coin.value);
-        setCoins(prev => prev.filter(c => c.id !== activeCoinId));
-        addLog(`Dekódováno: +${coin.value} MK`, 'success');
-      }
-      setVideoAdVisible(false);
-      setActiveCoinId(null);
-    }
   };
 
   useEffect(() => {
@@ -249,17 +251,12 @@ export const GameView: React.FC = () => {
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/98 backdrop-blur-3xl animate-in fade-in duration-500">
           <div className="w-full max-w-4xl bg-black border-2 border-[#00f3ff]/40 shadow-[0_0_150px_rgba(0,243,255,0.2)] relative overflow-hidden flex flex-col">
             
-            {/* Modal Header */}
+            {/* Modal Header - Close button removed as requested */}
             <div className="p-5 border-b border-[#00f3ff]/20 flex justify-between items-center bg-[#050505]">
                <div className="flex items-center gap-4">
                  <Signal className="text-red-600 animate-pulse" size={20} />
                  <span className="text-sm font-black uppercase tracking-[0.25em]">{isVideoForStart ? 'PŘED-START_VAST_VERIFIKACE' : 'DATAVÝ_VAST_PŘENOS'}</span>
                </div>
-               {videoAdTimer <= 0 && (
-                 <button onClick={() => setVideoAdVisible(false)} className="text-[#ff00ff] hover:text-white transition-all transform hover:rotate-90">
-                   <X size={24} />
-                 </button>
-               )}
             </div>
 
             {/* Video Player Container */}
@@ -298,13 +295,9 @@ export const GameView: React.FC = () => {
                           <Shield size={18} className="text-green-400" />
                           <p className="text-xs font-black uppercase tracking-[0.25em] text-green-400">PŘENOS_VAST_DOKONČEN</p>
                        </div>
-                       <button 
-                        onClick={claimVideoReward} 
-                        className="group relative px-24 py-6 bg-[#ff00ff] text-black font-black uppercase text-base tracking-[0.5em] hover:bg-white transition-all shadow-[0_0_50px_rgba(255,0,255,0.5)] transform hover:scale-105 active:scale-95"
-                       >
-                         <span className="relative z-10">POTVRDIT_PŘÍJEM_DAT</span>
-                         <div className="absolute inset-0 bg-white scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-500" />
-                       </button>
+                       <div className="bg-black/40 px-6 py-2 border border-white/10 text-[9px] uppercase tracking-widest text-white/40">
+                          Probíhá automatické zpracování...
+                       </div>
                     </div>
                   )}
                </div>
