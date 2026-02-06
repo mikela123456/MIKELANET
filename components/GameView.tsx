@@ -4,7 +4,7 @@ import { AdBanner } from './AdBanner';
 
 type GameTab = 'profile' | 'expeditions' | 'items';
 type ExpeditionPhase = 'STARTING' | 'TRAVELING' | 'EXTRACTING' | 'COMPLETED' | 'FAILED';
-type AdSystem = 'HILLTOP' | 'IMA';
+type AdSystem = 'HILLTOP' | 'IMA' | 'CLICKADILLA';
 
 interface ExpeditionLog {
   id: string;
@@ -39,6 +39,7 @@ declare global {
 // Ad Configs
 const HILLTOP_VAST_URL = "https://groundedmine.com/d.mTFSzgdpGDNYvcZcGXUK/FeJm/9IuZZNUElDktPwTaYW3CNUz/YTwMNFD/ket-N/j_c/3qN/jPA/1cMuwy";
 const IMA_AD_TAG_URL = "https://youradexchange.com/video/select.php?r=10948866";
+const CLICKADILLA_VAST_URL = "https://vast.yomeno.xyz/vast?spot_id=1480488";
 const AD_WATCH_DURATION = 60; 
 
 export const GameView: React.FC = () => {
@@ -88,8 +89,13 @@ export const GameView: React.FC = () => {
     setVideoAdVisible(true);
     setVideoAdTimer(AD_WATCH_DURATION);
     setIsAdPlaying(false);
-    // Alternate between Hilltop and IMA system
-    setCurrentAdSystem(prev => prev === 'HILLTOP' ? 'IMA' : 'HILLTOP');
+    
+    // Cycle through systems: HILLTOP -> IMA -> CLICKADILLA -> HILLTOP
+    setCurrentAdSystem(prev => {
+      if (prev === 'HILLTOP') return 'IMA';
+      if (prev === 'IMA') return 'CLICKADILLA';
+      return 'HILLTOP';
+    });
   };
 
   const claimVideoReward = () => {
@@ -110,7 +116,7 @@ export const GameView: React.FC = () => {
     }
   };
 
-  // Improved Ad initialization for both Hilltop and IMA
+  // Improved Ad initialization for Hilltop, IMA and Clickadilla
   useEffect(() => {
     if (!videoAdVisible || !videoRef.current) return;
 
@@ -120,7 +126,7 @@ export const GameView: React.FC = () => {
           layoutControls: {
             fillToContainer: true,
             autoPlay: true,
-            mute: false, // Changed from true to false to enable sound
+            mute: false, 
             allowDownload: false,
             playbackRateControl: false,
             persistentSettings: { volume: false }
@@ -139,27 +145,27 @@ export const GameView: React.FC = () => {
         setIsAdPlaying(true);
       }
     } 
-    else if (currentAdSystem === 'IMA' && window.videojs) {
+    else if ((currentAdSystem === 'IMA' || currentAdSystem === 'CLICKADILLA') && window.videojs) {
       try {
+        const adTag = currentAdSystem === 'IMA' ? IMA_AD_TAG_URL : CLICKADILLA_VAST_URL;
+        
         const player = window.videojs(videoRef.current, {
           autoplay: true,
-          muted: false, // Changed from true to false to enable sound
+          muted: false, 
           controls: false,
           fluid: true,
           sources: [{
-            // Dummy source often needed for some IMA implementations to behave correctly
             src: 'https://vjs.zencdn.net/v/oceans.mp4',
             type: 'video/mp4'
           }]
         });
 
         player.ima({
-          adTagUrl: IMA_AD_TAG_URL,
+          adTagUrl: adTag,
           showControlsForAds: false,
           debug: false
         });
 
-        // Some browsers require explicit initialization
         player.on('ready', () => {
           if (player.ima && player.ima.initializeAdDisplayContainer) {
             player.ima.initializeAdDisplayContainer();
@@ -169,14 +175,14 @@ export const GameView: React.FC = () => {
 
         player.on('adserror', (e: any) => {
           console.warn("IMA Ads Error:", e);
-          addLog("IMA Uplink unstable, waiting for timeout...", "warn");
+          addLog(`${currentAdSystem} Uplink unstable, waiting for timeout...`, "warn");
         });
 
         playerInstance.current = player;
         setIsAdPlaying(true);
-        addLog("Inicializace YourAdExchange IMA...", "info");
+        addLog(`Inicializace ${currentAdSystem} protokolu...`, "info");
       } catch (e) {
-        console.error("IMA setup error:", e);
+        console.error("IMA/Clickadilla setup error:", e);
         setIsAdPlaying(true);
       }
     }
@@ -310,7 +316,7 @@ export const GameView: React.FC = () => {
                <div className="flex items-center gap-4">
                  <Signal className="text-red-600 animate-pulse" size={20} />
                  <span className="text-sm font-black uppercase tracking-[0.25em]">
-                   {currentAdSystem === 'HILLTOP' ? 'SECURE_CHANNEL_HILLTOP' : 'SECURE_CHANNEL_IMA'}
+                   SECURE_CHANNEL_{currentAdSystem}
                  </span>
                </div>
             </div>
@@ -324,7 +330,7 @@ export const GameView: React.FC = () => {
                   </video>
                </div>
                
-               <div className="absolute bottom-0 left-0 w-full p-10 bg-gradient-t-t from-black via-black/90 to-transparent flex flex-col items-center gap-6 z-30 pointer-events-none">
+               <div className="absolute bottom-0 left-0 w-full p-10 bg-gradient-to-t from-black via-black/90 to-transparent flex flex-col items-center gap-6 z-30 pointer-events-none">
                   {videoAdTimer > 0 ? (
                     <div className="flex flex-col items-center gap-4 bg-black/80 px-12 py-6 border border-[#00f3ff]/20 backdrop-blur-md shadow-2xl pointer-events-auto">
                        <div className="flex items-center gap-6">
@@ -357,11 +363,10 @@ export const GameView: React.FC = () => {
             </div>
 
             <div className="p-4 bg-[#050505] flex justify-between items-center border-t border-white/5 px-8">
-               <span className="text-[8px] opacity-20 uppercase tracking-[0.4em]">Protocol: {currentAdSystem === 'HILLTOP' ? 'HilltopAds_VAST' : 'VideoJS_IMA_v3'} | 0xDEADBEEF</span>
+               <span className="text-[8px] opacity-20 uppercase tracking-[0.4em]">Protocol: {currentAdSystem === 'HILLTOP' ? 'HilltopAds_VAST' : currentAdSystem === 'IMA' ? 'VideoJS_IMA_v3' : 'Clickadilla_VAST'} | 0xDEADBEEF</span>
                <div className="flex gap-4">
-                  {/* Fixed Manual link - point to developer page instead of raw VAST XML to avoid the 'no style information' error */}
                   <button 
-                    onClick={() => window.open(currentAdSystem === 'HILLTOP' ? 'https://hilltopads.com' : 'https://www.google.com/ads/publisher/', '_blank')} 
+                    onClick={() => window.open(currentAdSystem === 'HILLTOP' ? 'https://hilltopads.com' : currentAdSystem === 'CLICKADILLA' ? 'https://clickadilla.com' : 'https://www.google.com/ads/publisher/', '_blank')} 
                     className="text-[8px] uppercase tracking-widest text-[#00f3ff]/40 hover:text-white flex items-center gap-1"
                   >
                     <ExternalLink size={10} /> Manuální_Odkaz
