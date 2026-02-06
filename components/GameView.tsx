@@ -4,7 +4,7 @@ import { AdBanner } from './AdBanner';
 
 type GameTab = 'profile' | 'expeditions' | 'items';
 type ExpeditionPhase = 'STARTING' | 'TRAVELING' | 'EXTRACTING' | 'COMPLETED' | 'FAILED';
-type AdSystem = 'HILLTOP' | 'MYADCASH';
+type AdSystem = 'HILLTOP' | 'IMA';
 
 interface ExpeditionLog {
   id: string;
@@ -31,12 +31,13 @@ interface GameCoin {
 declare global {
   interface Window {
     fluidPlayer: any;
-    aclib: any;
+    videojs: any;
   }
 }
 
-// HilltopAds VAST Tag URL
-const VIDEO_AD_URL = "https://groundedmine.com/d.mTFSzgdpGDNYvcZcGXUK/FeJm/9IuZZNUElDktPwTaYW3CNUz/YTwMNFD/ket-N/j_c/3qN/jPA/1cMuwy";
+// Ad Configs
+const HILLTOP_VAST_URL = "https://groundedmine.com/d.mTFSzgdpGDNYvcZcGXUK/FeJm/9IuZZNUElDktPwTaYW3CNUz/YTwMNFD/ket-N/j_c/3qN/jPA/1cMuwy";
+const IMA_AD_TAG_URL = "https://youradexchange.com/video/select.php?r=10948866";
 const AD_WATCH_DURATION = 60; 
 
 export const GameView: React.FC = () => {
@@ -82,26 +83,14 @@ export const GameView: React.FC = () => {
   };
 
   const openVideoAd = (forStart: boolean = false) => {
-    // Toggling systems: Hilltop -> MyAdCash -> Hilltop...
+    // Toggle system for the next play
     const chosenSystem = currentAdSystem;
-    setCurrentAdSystem(chosenSystem === 'HILLTOP' ? 'MYADCASH' : 'HILLTOP');
+    setCurrentAdSystem(chosenSystem === 'HILLTOP' ? 'IMA' : 'HILLTOP');
 
     setIsVideoForStart(forStart);
     setVideoAdVisible(true);
     setVideoAdTimer(AD_WATCH_DURATION);
     setIsAdPlaying(false);
-    
-    // If MyAdCash, trigger it directly
-    if (chosenSystem === 'MYADCASH' && window.aclib) {
-      try {
-        window.aclib.runAutoTag({
-          zoneId: '1ixxi9j9at',
-        });
-        addLog("Iniciuji MyAdCash AutoTag uzel...", "info");
-      } catch (e) {
-        console.error("MyAdCash failed", e);
-      }
-    }
   };
 
   const claimVideoReward = () => {
@@ -122,9 +111,11 @@ export const GameView: React.FC = () => {
     }
   };
 
-  // Fluid Player Logic (only if system is HILLTOP)
+  // Unified Ad initialization effect
   useEffect(() => {
-    if (videoAdVisible && currentAdSystem === 'HILLTOP' && videoRef.current && window.fluidPlayer) {
+    if (!videoAdVisible || !videoRef.current) return;
+
+    if (currentAdSystem === 'HILLTOP' && window.fluidPlayer) {
       playerInstance.current = window.fluidPlayer(videoRef.current, {
         layoutControls: {
           fillToContainer: true,
@@ -135,39 +126,46 @@ export const GameView: React.FC = () => {
           persistentSettings: { volume: false }
         },
         vastOptions: {
-          adList: [
-            {
-              roll: 'preRoll',
-              vastTag: VIDEO_AD_URL
-            }
-          ],
-          adFinishedCallback: () => {
-            addLog("Ad Transmission Complete.", "success");
-          }
+          adList: [{ roll: 'preRoll', vastTag: HILLTOP_VAST_URL }],
+          adFinishedCallback: () => addLog("Hilltop Transmission Complete.", "success")
         }
       });
-
-      const checkPlayback = setInterval(() => {
-        if (playerInstance.current && !isAdPlaying) {
-          setIsAdPlaying(true);
-          addLog("Uplink Established. Verifying Hilltop data...", "info");
-        }
-      }, 1000);
-
-      return () => {
-        clearInterval(checkPlayback);
-        if (playerInstance.current) {
-          try { playerInstance.current.destroy(); } catch(e) {}
-          playerInstance.current = null;
-        }
-      };
-    } else if (videoAdVisible && currentAdSystem === 'MYADCASH') {
-      // MyAdCash system handles its own rendering, we just need to start the 60s timer
       setIsAdPlaying(true);
+      addLog("Iniciuji HilltopAds VAST protokol...", "info");
+    } 
+    else if (currentAdSystem === 'IMA' && window.videojs) {
+      // Create Video.js player
+      playerInstance.current = window.videojs(videoRef.current, {
+        autoplay: true,
+        muted: true,
+        controls: false,
+        fluid: true
+      });
+
+      // Initialize IMA
+      playerInstance.current.ima({
+        adTagUrl: IMA_AD_TAG_URL,
+      });
+
+      setIsAdPlaying(true);
+      addLog("Iniciuji Video.js IMA uzel...", "info");
     }
+
+    return () => {
+      if (playerInstance.current) {
+        try {
+          if (currentAdSystem === 'HILLTOP') {
+            playerInstance.current.destroy();
+          } else {
+            playerInstance.current.dispose();
+          }
+        } catch(e) {}
+        playerInstance.current = null;
+      }
+    };
   }, [videoAdVisible, currentAdSystem]);
 
-  // Unified 60s gate and auto-close
+  // Timer logic
   useEffect(() => {
     let timer: number;
     if (videoAdVisible && isAdPlaying && videoAdTimer > 0) {
@@ -283,7 +281,7 @@ export const GameView: React.FC = () => {
                <div className="flex items-center gap-4">
                  <Signal className="text-red-600 animate-pulse" size={20} />
                  <span className="text-sm font-black uppercase tracking-[0.25em]">
-                   {currentAdSystem === 'HILLTOP' ? 'UPLINK_VAST_HILLTOP' : 'UPLINK_AUTOTAG_MYADCASH'}
+                   {currentAdSystem === 'HILLTOP' ? 'UPLINK_VAST_HILLTOP' : 'UPLINK_VIDEOJS_IMA'}
                  </span>
                </div>
             </div>
@@ -292,18 +290,10 @@ export const GameView: React.FC = () => {
             <div className="aspect-video bg-[#010101] relative flex flex-col items-center justify-center overflow-hidden">
                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,243,255,0.05)_0%,transparent_70%)] pointer-events-none" />
 
-               {/* Fluid Player (Hilltop) or Empty (MyAdCash script handles display) */}
-               <div className="w-full h-full z-10">
-                  {currentAdSystem === 'HILLTOP' ? (
-                    <video ref={videoRef} id="video-ad-player">
-                      <source src="" type="video/mp4" />
-                    </video>
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center">
-                       <Database className="text-[#ff00ff] animate-pulse mb-4" size={48} />
-                       <span className="text-xs font-black uppercase tracking-[0.4em]">MyAdCash Protocol Active</span>
-                    </div>
-                  )}
+               <div className="w-full h-full z-10 flex items-center justify-center">
+                  <video ref={videoRef} id="my-video" className="video-js vjs-default-skin w-full h-full">
+                    <source src="" type="video/mp4" />
+                  </video>
                </div>
                
                {/* Overlay Progress / Controls */}
@@ -340,9 +330,9 @@ export const GameView: React.FC = () => {
             </div>
 
             <div className="p-4 bg-[#050505] flex justify-between items-center border-t border-white/5 px-8">
-               <span className="text-[8px] opacity-20 uppercase tracking-[0.4em]">Protocol: {currentAdSystem === 'HILLTOP' ? 'HilltopAds_VAST' : 'MyAdCash_AutoTag'} | 0xDEADBEEF</span>
+               <span className="text-[8px] opacity-20 uppercase tracking-[0.4em]">Protocol: {currentAdSystem === 'HILLTOP' ? 'HilltopAds_VAST' : 'VideoJS_IMA'} | 0xDEADBEEF</span>
                <div className="flex gap-4">
-                  <button onClick={() => window.open(VIDEO_AD_URL, '_blank')} className="text-[8px] uppercase tracking-widest text-[#00f3ff]/40 hover:text-white flex items-center gap-1">
+                  <button onClick={() => window.open(HILLTOP_VAST_URL, '_blank')} className="text-[8px] uppercase tracking-widest text-[#00f3ff]/40 hover:text-white flex items-center gap-1">
                     <ExternalLink size={10} /> Manuální_Odkaz
                   </button>
                </div>
@@ -632,6 +622,7 @@ export const GameView: React.FC = () => {
         }
         .neon-glow-cyan { text-shadow: 0 0 10px #00f3ff, 0 0 20px #00f3ff; }
         .neon-glow-pink { text-shadow: 0 0 10px #ff00ff, 0 0 20px #ff00ff; }
+        .video-js.vjs-fluid { height: 100% !important; padding-top: 0 !important; }
       `}</style>
     </div>
   );

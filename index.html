@@ -7,11 +7,22 @@
     <title>Digital Future UI</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
-    <!-- Fluid Player Assets -->
+    
+    <!-- Video.js Core Assets -->
+    <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
+    <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+    
+    <!-- IMA SDK & Videojs-IMA dependencies -->
+    <script src="https://imasdk.googleapis.com/js/sdkloader/ima3.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/videojs-contrib-ads/6.9.0/videojs-contrib-ads.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/videojs-contrib-ads/6.9.0/videojs-contrib-ads.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/videojs-ima/2.1.0/videojs.ima.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/videojs-ima/2.1.0/videojs.ima.min.js"></script>
+
+    <!-- Fluid Player Assets (pro HilltopAds) -->
     <link rel="stylesheet" href="https://cdn.fluidplayer.com/v3/current/fluidplayer.min.css" type="text/css" />
     <script src="https://cdn.fluidplayer.com/v3/current/fluidplayer.min.js"></script>
-    <!-- MyAdCash Library -->
-    <script src="https://myadcash.com/script/autotag.js"></script>
+    
     <style>
         body {
             margin: 0;
@@ -53,12 +64,8 @@
         .neon-glow-cyan {
             text-shadow: 0 0 5px #00f3ff, 0 0 10px #00f3ff;
         }
-        /* Custom Fluid Player overrides for Cyberpunk aesthetic */
-        .fluid_video_wrapper {
+        .fluid_video_wrapper, .video-js {
             background-color: #000 !important;
-        }
-        .fluid_controls_container {
-            background: linear-gradient(transparent, rgba(0, 243, 255, 0.1)) !important;
         }
     </style>
 <script type="importmap">
