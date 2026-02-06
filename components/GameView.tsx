@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { User, Sword, Package, Zap, Compass, Truck, Timer, Trophy, Shield, AlertTriangle, ChevronRight, Activity, Clock, Loader2, Coins, X, Terminal, Database, ShieldAlert as AlertIcon, PlayCircle, Lock, ExternalLink, RefreshCw, Eye, Signal, Volume2 } from 'lucide-react';
-import { AdBanner } from './AdBanner';
+
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+// Added Loader2 to the lucide-react import list
+import { User, Zap, Compass, Truck, Timer, Trophy, Shield, Activity, Clock, Database, PlayCircle, Lock, Signal, Sword, Cpu, Download, Wifi, AlertTriangle, ShieldAlert, Loader2 } from 'lucide-react';
 
 type GameTab = 'profile' | 'expeditions' | 'items';
-type ExpeditionPhase = 'STARTING' | 'TRAVELING' | 'EXTRACTING' | 'COMPLETED' | 'FAILED';
+type ExpeditionPhase = 'COMBAT' | 'HARVESTING' | 'STABILIZING' | 'COMPLETED' | 'FAILED';
 type AdSystem = 'HILLTOP' | 'CLICKADILLA' | 'ONCLICKA';
 
 interface ExpeditionLog {
@@ -21,77 +22,54 @@ interface UpgradeItem {
   desc: string;
 }
 
-interface GameCoin {
-  id: string;
-  x: number;
-  y: number;
-  value: number;
-}
-
 declare global {
   interface Window {
     fluidPlayer: any;
-    videojs: any;
-    google: any;
   }
 }
 
-// Ad Configs
 const HILLTOP_VAST_URL = "https://groundedmine.com/d.mTFSzgdpGDNYvcZcGXUK/FeJm/9IuZZNUElDktPwTaYW3CNUz/YTwMNFD/ket-N/j_c/3qN/jPA/1cMuwy";
 const CLICKADILLA_VAST_URL = "https://vast.yomeno.xyz/vast?spot_id=1480488";
 const ONCLICKA_VAST_URL = "https://bid.onclckstr.com/vast?spot_id=6109953";
-const AD_WATCH_DURATION = 60; 
 
 export const GameView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<GameTab>('profile');
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  
   const [mikelaReserves, setMikelaReserves] = useState(150);
   const [reputation, setReputation] = useState(1240);
   const [expeditionLevel, setExpeditionLevel] = useState(1);
-
   const [upgrades, setUpgrades] = useState<UpgradeItem[]>([
-    { id: 'atk', name: 'Útočný Protokol', icon: Zap, level: 1, baseCost: 50, desc: 'Zvyšuje sílu úderu proti bannerům.' },
-    { id: 'spd', name: 'Tachyonový Pohon', icon: Compass, level: 1, baseCost: 40, desc: 'Zkracuje čas trvání mise.' },
-    { id: 'trns', name: 'Datový Uzel', icon: Truck, level: 1, baseCost: 30, desc: 'Efektivnější přenos vytěžených dat.' },
-    { id: 'tm', name: 'Forging Modul', icon: Timer, level: 1, baseCost: 60, desc: 'Zvyšuje výnos MIKELA z jedné mise.' },
+    { id: 'atk', name: 'Útočný Protokol', icon: Sword, level: 1, baseCost: 50, desc: 'Zvyšuje efektivitu v bojové fázi expedice.' },
+    { id: 'spd', name: 'Tachyonový Pohon', icon: Compass, level: 1, baseCost: 40, desc: 'Zkracuje časovou náročnost operací.' },
+    { id: 'trns', name: 'Datový Uzel', icon: Truck, level: 1, baseCost: 30, desc: 'Zvyšuje rychlost sběru fragmentů.' },
+    { id: 'tm', name: 'Forging Modul', icon: Timer, level: 1, baseCost: 60, desc: 'Zvyšuje výnos MIKELA z každé mise.' },
   ]);
 
-  const [activeExpedition, setActiveExpedition] = useState<boolean>(false);
-  const [phase, setPhase] = useState<ExpeditionPhase>('STARTING');
-  const [logs, setLogs] = useState<ExpeditionLog[]>([]);
-  const [progress, setProgress] = useState(0);
+  // Expedition States
+  const [activeExpedition, setActiveExpedition] = useState(false);
+  const [phase, setPhase] = useState<ExpeditionPhase>('COMBAT');
   const [timeLeft, setTimeLeft] = useState(0);
-  const [coins, setCoins] = useState<GameCoin[]>([]);
-  
-  const [activeAds, setActiveAds] = useState<{id: number}[]>([]);
-  const [adsDestroyed, setAdsDestroyed] = useState(0);
-  
-  // Video Ad States
-  const [videoAdVisible, setVideoAdVisible] = useState(false);
-  const [videoAdTimer, setVideoAdTimer] = useState(0);
-  const [activeCoinId, setActiveCoinId] = useState<string | null>(null);
-  const [isVideoForStart, setIsVideoForStart] = useState(false);
-  const [isAdPlaying, setIsAdPlaying] = useState(false);
+  const [totalTime, setTotalTime] = useState(0);
+  const [logs, setLogs] = useState<ExpeditionLog[]>([]);
   const [currentAdSystem, setCurrentAdSystem] = useState<AdSystem>('HILLTOP');
+  const [playerError, setPlayerError] = useState<string | null>(null);
+  const [isAdLoading, setIsAdLoading] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
-  const adContainerRef = useRef<HTMLDivElement>(null);
   const playerInstance = useRef<any>(null);
+  const watchdogTimer = useRef<number | null>(null);
 
-  const calculateTotalDuration = (level: number) => Math.max(15, 20 + (level - 1) * 4);
-
-  const addLog = (text: string, type: 'info' | 'warn' | 'success' | 'error' = 'info') => {
-    setLogs(prev => [{ id: Math.random().toString(), text, type }, ...prev].slice(0, 12));
+  // Scaling logic
+  const calculateDuration = (lvl: number) => {
+    if (lvl <= 10) return 60 + (lvl - 1) * 30;
+    const baseAtLevel10 = 60 + 9 * 30; 
+    return baseAtLevel10 + (lvl - 10) * 60;
   };
 
-  const openVideoAd = (forStart: boolean = false) => {
-    setIsVideoForStart(forStart);
-    setVideoAdVisible(true);
-    setVideoAdTimer(AD_WATCH_DURATION);
-    setIsAdPlaying(false);
-    
-    // Cycle through systems: HILLTOP -> CLICKADILLA -> ONCLICKA -> HILLTOP
+  const addLog = (text: string, type: 'info' | 'warn' | 'success' | 'error' = 'info') => {
+    setLogs(prev => [{ id: Math.random().toString(), text, type }, ...prev].slice(0, 15));
+  };
+
+  const cycleSystem = () => {
     setCurrentAdSystem(prev => {
       if (prev === 'HILLTOP') return 'CLICKADILLA';
       if (prev === 'CLICKADILLA') return 'ONCLICKA';
@@ -99,277 +77,186 @@ export const GameView: React.FC = () => {
     });
   };
 
-  const claimVideoReward = () => {
-    if (videoAdTimer > 0) return;
-    if (isVideoForStart) {
-      startExpedition();
-    } else if (activeCoinId) {
-      const coin = coins.find(c => c.id === activeCoinId);
-      if (coin) {
-        setMikelaReserves(prev => prev + coin.value);
-        setCoins(prev => prev.filter(c => c.id !== activeCoinId));
-        addLog(`Dekódováno: +${coin.value} MK`, 'success');
-      }
-      setVideoAdVisible(false);
-      setActiveCoinId(null);
-    } else {
-      setVideoAdVisible(false);
+  const startExpedition = () => {
+    const duration = calculateDuration(expeditionLevel);
+    setTotalTime(duration);
+    setTimeLeft(duration);
+    setActiveExpedition(true);
+    setPhase('COMBAT');
+    setLogs([]);
+    addLog(`Navazování spojení se Sektorem 0x${expeditionLevel.toString(16).toUpperCase()}`, 'info');
+    addLog(`AFK-Mining zahájen. Očekávaný čas: ${Math.floor(duration/60)}m ${duration%60}s`, 'warn');
+  };
+
+  const finishExpedition = () => {
+    const baseReward = 200 * expeditionLevel;
+    const bonusMultiplier = 1 + (upgrades.find(u => u.id === 'tm')!.level * 0.15);
+    const totalReward = Math.floor(baseReward * bonusMultiplier);
+    
+    setMikelaReserves(p => p + totalReward);
+    setReputation(p => p + expeditionLevel * 60);
+    setExpeditionLevel(p => p + 1);
+    setPhase('COMPLETED');
+    addLog(`Data zajištěna! Reward: +${totalReward} MK`, 'success');
+    
+    if (playerInstance.current) {
+        playerInstance.current.destroy();
+        playerInstance.current = null;
     }
   };
 
-  // Ad Compliance: Control body class to disable scanlines/CRT when ad is visible
+  // Video Ad Rotation & Robust Error Handling
   useEffect(() => {
-    if (videoAdVisible) {
-      document.body.classList.add('ad-playing');
-    } else {
-      document.body.classList.remove('ad-playing');
-    }
-    return () => document.body.classList.remove('ad-playing');
-  }, [videoAdVisible]);
+    if (!activeExpedition || phase === 'COMPLETED' || phase === 'FAILED') return;
 
-  // Improved Ad initialization for all systems
-  useEffect(() => {
-    if (!videoAdVisible) return;
+    const vastUrls: Record<AdSystem, string> = {
+      HILLTOP: HILLTOP_VAST_URL,
+      CLICKADILLA: CLICKADILLA_VAST_URL,
+      ONCLICKA: ONCLICKA_VAST_URL
+    };
 
-    // Fallback timer: if ad doesn't start in 8s, start the 60s countdown anyway
-    const fallbackTimer = setTimeout(() => {
-      setIsAdPlaying(true);
-      addLog("Signál nestabilní, přecházím na autonomní odpočet...", "warn");
-    }, 8000);
+    const handlePlayerError = (err: any) => {
+      const msg = String(err?.message || err || "UNKNOWN_VAST_ERROR");
+      console.warn(`[WATCHDOG] VAST Error caught: ${msg}`);
+      
+      // Specifically handle the "link" and "Unknown in-stream ad type" strings
+      if (msg.toLowerCase().includes("link") || msg.toLowerCase().includes("unknown in-stream")) {
+        addLog(`Uzel ${currentAdSystem} vykazuje anomálii linku. Přesměrovávám...`, 'warn');
+      } else {
+        addLog(`Chyba signálu na uzlu ${currentAdSystem}.`, 'error');
+      }
 
-    // Fluid Player initialization
-    if (window.fluidPlayer && videoRef.current) {
-      let vastUrl = HILLTOP_VAST_URL;
-      if (currentAdSystem === 'CLICKADILLA') vastUrl = CLICKADILLA_VAST_URL;
-      if (currentAdSystem === 'ONCLICKA') vastUrl = ONCLICKA_VAST_URL;
+      setPlayerError("RE-ROUTING");
+      setIsAdLoading(false);
+      
+      // Cleanup watchdog
+      if (watchdogTimer.current) window.clearTimeout(watchdogTimer.current);
+
+      setTimeout(() => {
+        setPlayerError(null);
+        cycleSystem();
+      }, 1000);
+    };
+
+    const initPlayer = () => {
+      if (!videoRef.current || !window.fluidPlayer) return;
+
+      setIsAdLoading(true);
+
+      // Watchdog: If ad doesn't start in 8 seconds, force cycle
+      if (watchdogTimer.current) window.clearTimeout(watchdogTimer.current);
+      watchdogTimer.current = window.setTimeout(() => {
+        if (isAdLoading) {
+           addLog(`Časový limit pro uzel ${currentAdSystem} vypršel.`, 'warn');
+           handlePlayerError("TIMEOUT");
+        }
+      }, 8000);
 
       try {
+        if (playerInstance.current) {
+          playerInstance.current.destroy();
+        }
+
         playerInstance.current = window.fluidPlayer(videoRef.current, {
           layoutControls: {
             fillToContainer: true,
             autoPlay: true,
-            mute: false, 
+            mute: true,
             allowDownload: false,
             playbackRateControl: false,
-            persistentSettings: { volume: false }
+            persistentSettings: { volume: false },
+            controlBar: { autoHide: true },
+            playButtonShowing: false,
+            keyboardControl: false,
+            htmlOnPauseBlock: {
+                enabled: true,
+                html: '<div style="color:white; font-family:mono; text-align:center; padding: 10px;">PROBÍHÁ SYNCHRONIZACE...</div>'
+            }
           },
           vastOptions: {
-            adList: [{ roll: 'preRoll', vastTag: vastUrl }],
-            adFinishedCallback: () => {
-              addLog(`${currentAdSystem} přenos dokončen.`, "success");
+            adList: [{ roll: 'preRoll', vastTag: vastUrls[currentAdSystem] }],
+            adStartedCallback: () => {
+              setIsAdLoading(false);
+              if (watchdogTimer.current) window.clearTimeout(watchdogTimer.current);
             },
-            adErrorCallback: (err: any) => {
-              console.warn("VAST Error:", err);
-              addLog(`${currentAdSystem} VAST uzel nedostupný.`, "error");
-              setIsAdPlaying(true); 
-            }
+            adFinishedCallback: () => {
+              addLog(`Uzel ${currentAdSystem} synchronizován. Pokračuji...`, 'success');
+              cycleSystem();
+            },
+            adErrorCallback: (err: any) => handlePlayerError(err)
           }
         });
-        setIsAdPlaying(true);
-        addLog(`Inicializace ${currentAdSystem} VAST protokolu...`, "info");
       } catch (e) {
-        console.error("FluidPlayer error:", e);
-        setIsAdPlaying(true);
-      }
-    } 
-
-    return () => {
-      clearTimeout(fallbackTimer);
-      if (playerInstance.current) {
-        try {
-          playerInstance.current.destroy();
-        } catch(e) {}
-        playerInstance.current = null;
-      }
-      if (adContainerRef.current) {
-        adContainerRef.current.innerHTML = '';
+        console.error("Critical Player Initialization Error:", e);
+        handlePlayerError(e);
       }
     };
-  }, [videoAdVisible, currentAdSystem]);
 
-  // Unified timer for 60s watch requirement
-  useEffect(() => {
-    let timer: number;
-    if (videoAdVisible && isAdPlaying && videoAdTimer > 0) {
-      timer = window.setInterval(() => {
-        setVideoAdTimer(prev => prev - 1);
-      }, 1000);
-    } else if (videoAdVisible && isAdPlaying && videoAdTimer === 0) {
-      const autoCloseTimeout = setTimeout(() => {
-        claimVideoReward();
-      }, 1500);
-      return () => clearTimeout(autoCloseTimeout);
-    }
-    return () => clearInterval(timer);
-  }, [videoAdVisible, isAdPlaying, videoAdTimer]);
+    initPlayer();
 
-  const startExpedition = () => {
-    setVideoAdVisible(false);
-    const baseDuration = calculateTotalDuration(expeditionLevel);
-    const spdLevel = upgrades.find(u => u.id === 'spd')?.level || 1;
-    const effectiveDuration = Math.ceil(baseDuration * (1 - Math.min(0.6, (spdLevel - 1) * 0.06)));
-    
-    setExpeditionEndTime(Date.now() + (effectiveDuration * 1000));
-    setCurrentExpeditionDuration(effectiveDuration);
-    setActiveExpedition(true);
-    setPhase('STARTING');
-    setLogs([]);
-    setProgress(0);
-    setAdsDestroyed(0);
-    setTimeLeft(effectiveDuration);
-    setCoins([]);
-    
-    setActiveAds([{ id: Date.now() }]);
-    addLog(`Navázáno spojení se Sektorem 0x${expeditionLevel.toString(16).toUpperCase()}`, 'info');
-  };
-
-  const [expeditionEndTime, setExpeditionEndTime] = useState<number | null>(null);
-  const [currentExpeditionDuration, setCurrentExpeditionDuration] = useState<number>(0);
-
-  const handleCoinClick = (id: string) => {
-    setActiveCoinId(id);
-    openVideoAd(false);
-    addLog("Iniciuji dekódování datového fragmentu...", "info");
-  };
-
-  const handleAdDestroyed = (id: number) => {
-    setActiveAds(prev => prev.filter(ad => ad.id !== id));
-    setAdsDestroyed(prev => prev + 1);
-    addLog(`Anomálie eliminována: +1 fragment`, 'success');
-    
-    setTimeout(() => {
-      if (activeExpedition && timeLeft > 4) {
-        setActiveAds(prev => [...prev, { id: Date.now() }]);
+    return () => {
+      if (watchdogTimer.current) window.clearTimeout(watchdogTimer.current);
+      if (playerInstance.current) {
+        try { playerInstance.current.destroy(); } catch(e) {}
+        playerInstance.current = null;
       }
-    }, 2500);
-  };
+    };
+  }, [activeExpedition, currentAdSystem, phase]);
 
+  // Main Mission Timer
   useEffect(() => {
-    if (!activeExpedition || !expeditionEndTime) return;
+    if (!activeExpedition || timeLeft <= 0 || phase === 'COMPLETED') return;
 
     const interval = setInterval(() => {
-      const now = Date.now();
-      const delta = expeditionEndTime - now;
-      const remaining = Math.max(0, Math.ceil(delta / 1000));
-      setTimeLeft(remaining);
-      
-      const elapsed = currentExpeditionDuration - remaining;
-      const currentProgress = Math.min(100, Math.floor((elapsed / currentExpeditionDuration) * 100));
-      setProgress(currentProgress);
+      setTimeLeft(prev => {
+        const next = prev - 1;
+        
+        // Phase Thresholds
+        const progress = ((totalTime - next) / totalTime) * 100;
+        if (progress < 35) setPhase('COMBAT');
+        else if (progress < 85) setPhase('HARVESTING');
+        else setPhase('STABILIZING');
 
-      setPhase(prev => {
-        if (currentProgress < 15) return 'STARTING';
-        if (currentProgress < 85) return 'TRAVELING';
-        return 'EXTRACTING';
-      });
-
-      if (Math.random() < 0.05 && coins.length < 2 && currentProgress > 20 && currentProgress < 80) {
-        setCoins(prev => [...prev, {
-          id: Math.random().toString(),
-          x: 20 + Math.random() * 60,
-          y: 25 + Math.random() * 50,
-          value: Math.floor(120 * expeditionLevel * (1 + Math.random() * 0.5))
-        }]);
-      }
-
-      if (now >= expeditionEndTime) {
-        clearInterval(interval);
-        const success = adsDestroyed >= Math.floor(expeditionLevel * 0.7) || Math.random() > 0.4;
-        if (success) {
-          setPhase('COMPLETED');
-          const reward = Math.floor(120 * expeditionLevel + (adsDestroyed * 35));
-          setMikelaReserves(p => p + reward);
-          setReputation(p => p + expeditionLevel * 40);
-          setExpeditionLevel(p => p + 1);
-        } else {
-          setPhase('FAILED');
+        if (next <= 0) {
+          finishExpedition();
+          return 0;
         }
-        setActiveAds([]);
-      }
-    }, 500);
+        return next;
+      });
+    }, 1000);
+
     return () => clearInterval(interval);
-  }, [activeExpedition, expeditionEndTime, adsDestroyed, expeditionLevel, phase, coins]);
+  }, [activeExpedition, timeLeft, totalTime, phase]);
+
+  // Dynamic Ambient Logs
+  useEffect(() => {
+    if (!activeExpedition || phase === 'COMPLETED') return;
+    
+    const logInterval = setInterval(() => {
+      const msgs: Record<string, string[]> = {
+        COMBAT: ["Lámání SSL na uzlu " + currentAdSystem, "Boj s firewallem partnera", "Injekce kódu přes " + currentAdSystem, "Zahlcování packetama"],
+        HARVESTING: ["Extrakce meta-dat...", "Analýza streamu " + currentAdSystem, "Stahování datových bloků", "Bypass validace"],
+        STABILIZING: ["Finalizace Matrix spojení...", "Šifrování výstupu", "Zahlazování digitálních stop", "Signál stabilní"]
+      };
+      
+      const currentMsgs = msgs[phase] || [];
+      if (currentMsgs.length > 0) {
+        addLog(currentMsgs[Math.floor(Math.random() * currentMsgs.length)], phase === 'COMBAT' ? 'warn' : 'info');
+      }
+    }, 9000);
+
+    return () => clearInterval(logInterval);
+  }, [activeExpedition, phase, currentAdSystem]);
+
+  const progressPercent = useMemo(() => {
+    if (totalTime === 0) return 0;
+    return Math.floor(((totalTime - timeLeft) / totalTime) * 100);
+  }, [timeLeft, totalTime]);
 
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
-      {/* AD COMPLIANCE MODAL: 100% OPAQUE, HIGHEST Z-INDEX, NO OVERLAYS */}
-      {videoAdVisible && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black animate-in fade-in duration-300">
-          <div className="w-full max-w-4xl bg-black border-2 border-[#00f3ff]/40 shadow-[0_0_200px_rgba(0,0,0,1)] relative overflow-hidden flex flex-col">
-            
-            {/* Safe zone Header */}
-            <div className="p-4 border-b border-[#00f3ff]/20 flex justify-between items-center bg-[#050505]">
-               <div className="flex items-center gap-4">
-                 <Signal className="text-red-600 animate-pulse" size={18} />
-                 <span className="text-xs font-black uppercase tracking-[0.2em]">
-                   SYSTEM_AUTH: {currentAdSystem}
-                 </span>
-               </div>
-               <div className="text-[10px] uppercase font-bold text-[#00f3ff]/40 tracking-widest">Příjem zabezpečeného signálu</div>
-            </div>
-
-            {/* THE AD PLAYER: THIS AREA IS STRICTLY FORBIDDEN TO BE OVERLAID */}
-            <div className="aspect-video bg-black relative flex items-center justify-center overflow-hidden border-y border-[#00f3ff]/10">
-               <div className="w-full h-full flex items-center justify-center">
-                  <video ref={videoRef} id="my-video" className="video-js vjs-default-skin w-full h-full" playsInline>
-                    <source src="https://vjs.zencdn.net/v/oceans.mp4" type="video/mp4" />
-                  </video>
-               </div>
-            </div>
-
-            {/* INFO ZONE: MOVED BELOW VIDEO TO PREVENT ANY OVERLAP */}
-            <div className="p-8 bg-black flex flex-col items-center gap-6 min-h-[180px] justify-center">
-                  {videoAdTimer > 0 ? (
-                    <div className="flex flex-col items-center gap-4 w-full">
-                       <div className="flex items-center gap-6 bg-[#00f3ff]/5 px-8 py-4 border border-[#00f3ff]/20">
-                         {!isAdPlaying ? (
-                            <Loader2 className="animate-spin text-[#00f3ff]" size={16} />
-                         ) : (
-                            <Activity className="text-[#00f3ff] animate-pulse" size={16} />
-                         )}
-                         <div className="flex flex-col">
-                            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[#00f3ff]">AUTORIZACE_PROBÍHÁ</span>
-                            <span className="text-[9px] text-white/40 uppercase tracking-widest font-bold">ZBÝVÁ: {videoAdTimer}S</span>
-                         </div>
-                       </div>
-                       
-                       <div className="w-full max-w-sm h-1.5 bg-white/5 relative rounded-full overflow-hidden">
-                          <div className="h-full bg-[#00f3ff] transition-all duration-1000 linear shadow-[0_0_15px_#00f3ff]" style={{ width: `${(1 - videoAdTimer/AD_WATCH_DURATION) * 100}%` }} />
-                       </div>
-                       <p className="text-[9px] text-white/20 uppercase tracking-[0.3em]">Nepřekrývejte ani neopouštějte okno přenosu</p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-5 animate-in zoom-in duration-500">
-                       <div className="flex items-center gap-3 bg-green-500/10 border border-green-500/50 px-8 py-3 rounded-full">
-                          <Shield size={20} className="text-green-500" />
-                          <p className="text-sm font-black uppercase tracking-[0.2em] text-green-500">AUTORIZACE_ÚSPĚŠNÁ</p>
-                       </div>
-                    </div>
-                  )}
-            </div>
-
-            <div className="p-3 bg-[#020202] flex justify-between items-center border-t border-white/5 px-8">
-               <span className="text-[7px] opacity-10 uppercase tracking-[0.3em]">SECURE_LINK_ENCRYPTED_v2</span>
-               <button 
-                  onClick={() => {
-                    const urls: Record<AdSystem, string> = {
-                      HILLTOP: 'https://hilltopads.com',
-                      CLICKADILLA: 'https://clickadilla.com',
-                      ONCLICKA: 'https://onclicka.com'
-                    };
-                    window.open(urls[currentAdSystem], '_blank');
-                  }} 
-                  className="text-[7px] uppercase tracking-widest text-[#00f3ff]/30 hover:text-white flex items-center gap-1"
-                >
-                  <ExternalLink size={8} /> INFO_NODE
-                </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Sidebar navigation */}
+      {/* Sidebar Navigation */}
       <aside className="w-20 md:w-64 border-r border-white/5 bg-black/60 flex flex-col py-8 z-20 backdrop-blur-md">
         <div className="mb-14 flex flex-col items-center gap-3">
           <Database className="text-[#00f3ff] animate-pulse" size={28} />
@@ -379,11 +266,11 @@ export const GameView: React.FC = () => {
           {[
             { id: 'profile' as GameTab, icon: User, label: 'Profil' },
             { id: 'expeditions' as GameTab, icon: Compass, label: 'Expedice' },
-            { id: 'items' as GameTab, icon: Package, label: 'Arzenál' },
+            { id: 'items' as GameTab, icon: Shield, label: 'Arzenál' },
           ].map((item) => (
             <button
               key={item.id}
-              onClick={() => { setActiveTab(item.id); setActiveExpedition(false); }}
+              onClick={() => { setActiveTab(item.id); if(!activeExpedition) setActiveExpedition(false); }}
               className={`w-full flex items-center justify-center md:justify-start gap-4 p-5 transition-all duration-300 rounded-xl ${activeTab === item.id ? 'bg-[#00f3ff]/15 text-[#00f3ff] border-r-4 border-[#00f3ff] shadow-[inset_0_0_20px_rgba(0,243,255,0.15)]' : 'text-white/20 hover:text-white hover:bg-white/5'}`}
             >
               <item.icon size={22} />
@@ -395,158 +282,243 @@ export const GameView: React.FC = () => {
 
       <main className="flex-1 relative flex flex-col overflow-hidden">
         {activeExpedition ? (
-          <div className="flex flex-col h-full animate-in fade-in duration-1000">
-            {/* HUD Header */}
-            <div className="px-12 py-8 border-b border-white/10 bg-black/95 flex justify-between items-center backdrop-blur-3xl z-10 shadow-[0_10px_40px_rgba(0,0,0,0.8)]">
-              <div className="flex items-center gap-12">
-                <div className="space-y-2">
-                  <span className="text-[9px] text-[#00f3ff]/40 uppercase font-black block tracking-[0.2em]">Deep_Sector</span>
-                  <span className="text-2xl font-black text-white italic uppercase tracking-[0.25em] neon-glow-cyan">0x{expeditionLevel.toString(16).toUpperCase()}</span>
-                </div>
-                <div className="h-12 w-[2px] bg-white/10" />
-                <div className="space-y-2">
-                  <span className="text-[9px] text-[#ff00ff]/40 uppercase font-black block tracking-[0.2em]">Uplink_Signal</span>
-                  <div className="flex items-center gap-3">
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#00f3ff] animate-ping" />
-                    <span className="text-sm font-black text-[#00f3ff] uppercase tracking-[0.2em]">{phase}</span>
-                  </div>
-                </div>
-              </div>
-              
+          <div className="flex flex-col h-full animate-in fade-in duration-700 bg-[#050505]">
+            {/* Mission HUD */}
+            <div className="px-12 py-6 border-b border-[#00f3ff]/20 bg-black flex justify-between items-center z-10 shadow-2xl">
               <div className="flex items-center gap-10">
-                <div className="text-right border-r border-white/10 pr-10">
-                   <span className="text-[9px] text-white/30 uppercase font-black block mb-1.5 tracking-widest">Fragments_Analyzed</span>
-                   <span className="text-lg font-black text-[#ff00ff] tabular-nums tracking-widest">{adsDestroyed} <span className="text-[10px] opacity-40">/ {Math.floor(expeditionLevel * 0.7)}</span></span>
+                <div className="space-y-1">
+                  <span className="text-[8px] text-[#00f3ff]/40 uppercase font-black block tracking-widest">UPLINK_PROTOCOL</span>
+                  <span className="text-xl font-black text-white italic uppercase tracking-[0.2em]">0x{expeditionLevel.toString(16).toUpperCase()}</span>
                 </div>
-                <div className="flex items-center gap-6 bg-[#00f3ff]/5 border-2 border-[#00f3ff]/20 px-12 py-5 rounded-lg shadow-[inset_0_0_15px_rgba(0,243,255,0.6)]">
-                  <Clock className="text-[#00f3ff] animate-pulse" size={24} />
-                  <span className="text-3xl font-mono font-black text-[#00f3ff] tabular-nums drop-shadow-[0_0_15px_rgba(0,243,255,0.6)]">
-                    {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Tactical View */}
-            <div className="flex-1 flex overflow-hidden">
-              <div className="flex-1 relative bg-[#010101] overflow-hidden">
-                <div className="absolute inset-0 tactical-grid opacity-[0.15]" />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_20%,rgba(0,0,0,0.95)_100%)] pointer-events-none" />
-                
-                {/* Ads Layer */}
-                <div className="absolute inset-0 z-30 pointer-events-none p-20 flex flex-col items-center gap-12">
-                  {activeAds.map(ad => (
-                    <div key={ad.id} className="pointer-events-auto shadow-[0_0_60px_rgba(0,0,0,1)] animate-in fade-in slide-in-from-top-12 duration-700 hover:scale-105 transition-transform">
-                      <AdBanner onDestroyed={() => handleAdDestroyed(ad.id)} playerAtk={upgrades[0].level} />
-                    </div>
-                  ))}
-                </div>
-
-                {/* Coins/Data Layer */}
-                <div className="absolute inset-0 z-20 pointer-events-none">
-                  {coins.map(coin => (
-                    <button 
-                      key={coin.id}
-                      onClick={() => handleCoinClick(coin.id)}
-                      className="absolute pointer-events-auto group animate-in zoom-in duration-1000"
-                      style={{ left: `${coin.x}%`, top: `${coin.y}%` }}
-                    >
-                       <div className="relative hover:scale-150 transition-transform duration-500">
-                          <div className="absolute inset-0 bg-[#ff00ff] blur-3xl opacity-50 animate-pulse" />
-                          <div className="bg-black border-2 border-[#ff00ff] p-6 flex flex-col items-center gap-3 shadow-[0_0_50px_rgba(255,0,255,0.5)] group-hover:border-white group-hover:shadow-[0_0_80px_rgba(255,255,255,0.3)] transition-all">
-                            <Coins className="text-[#ff00ff] group-hover:text-white group-hover:animate-bounce" size={40} />
-                            <div className="text-center space-y-1">
-                               <span className="text-[10px] font-black text-white bg-[#ff00ff] px-3 py-1 tracking-tighter block">DECRYPT_UPLINK</span>
-                               <span className="text-[9px] font-bold text-[#ff00ff] tracking-[0.1em] group-hover:text-white">{coin.value} MK</span>
-                            </div>
-                          </div>
-                       </div>
-                    </button>
-                  ))}
-                </div>
-
-                {/* Status HUD Overlays */}
-                {phase === 'COMPLETED' && (
-                  <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/98 backdrop-blur-2xl animate-in fade-in zoom-in duration-700">
-                    <div className="text-center p-24 border-2 border-[#00f3ff] bg-black/60 shadow-[0_0_150px_rgba(0,243,255,0.4)] max-w-3xl border-dashed">
-                      <Trophy size={140} className="text-[#00f3ff] mx-auto mb-12 animate-bounce neon-glow-cyan" />
-                      <h2 className="text-8xl font-black text-white italic uppercase tracking-tighter mb-8 neon-glow-cyan">SEKTOR_VYČIŠTĚN</h2>
-                      <p className="text-sm text-[#00f3ff] uppercase font-black mb-16 tracking-[0.5em] opacity-80 animate-pulse">Data Secured | Connection Stable | Rewarding Uplink</p>
-                      <button onClick={() => setActiveExpedition(false)} className="group relative px-32 py-10 bg-[#00f3ff] text-black font-black uppercase tracking-[0.8em] hover:bg-white transition-all text-lg overflow-hidden shadow-[0_0_50px_rgba(0,243,255,0.5)]">
-                        <span className="relative z-10">ODPOJIT_LINK</span>
-                        <div className="absolute inset-0 bg-white translate-x-full group-hover:translate-x-0 transition-transform duration-500" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Terminal sidebar */}
-              <div className="w-80 border-l border-white/5 bg-[#020202] flex flex-col shadow-[-30px_0_60px_rgba(0,0,0,0.8)] z-10">
-                <div className="p-8 border-b border-white/10 flex items-center justify-between bg-black/60">
-                  <div className="flex items-center gap-4">
-                    <Terminal size={20} className="text-[#00f3ff] animate-pulse" />
-                    <span className="text-[11px] text-[#00f3ff] font-black uppercase tracking-[0.4em]">SYSTEM_LOG</span>
-                  </div>
-                </div>
-                <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
-                  {logs.map(log => (
-                    <div key={log.id} className={`text-[11px] uppercase leading-relaxed border-l-3 pl-5 transition-all animate-in slide-in-from-right-6 duration-500 ${log.type === 'success' ? 'border-green-500 text-green-400' : log.type === 'error' ? 'border-red-600 text-red-500' : 'border-[#00f3ff]/40 text-[#00f3ff]/60'}`}>
-                      <div className="flex justify-between items-center opacity-40 text-[8px] mb-2 tracking-[0.1em]">
-                         <span>EVENT_NODE_{log.id.slice(-6)}</span>
-                         <span>{new Date().toLocaleTimeString()}</span>
-                      </div>
-                      <span className="font-black tracking-tight block leading-snug drop-shadow-lg">{log.text}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="p-10 bg-black/95 border-t border-white/10 space-y-8">
-                   <div className="space-y-4">
-                      <div className="flex justify-between text-[11px] text-[#00f3ff] font-black tracking-[0.4em] uppercase">
-                        <span>EXTRAKCE_DAT</span>
-                        <span className="neon-glow-cyan font-mono">{progress}%</span>
-                      </div>
-                      <div className="h-3 bg-white/5 relative rounded-full overflow-hidden p-1 border border-white/10">
-                        <div className="h-full bg-gradient-to-r from-[#00f3ff] via-[#ff00ff] to-[#00f3ff] shadow-[0_0_25px_rgba(0,243,255,0.8)] transition-all duration-300 rounded-full" style={{ width: `${progress}%` }} />
-                      </div>
+                <div className="h-8 w-px bg-white/10" />
+                <div className="flex flex-col">
+                   <span className="text-[8px] text-[#ff00ff]/40 uppercase font-black tracking-widest">STREAM_NODE</span>
+                   <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${isAdLoading ? 'bg-yellow-500 animate-pulse' : 'bg-[#ff00ff] animate-ping'}`} />
+                      <span className="text-xs font-bold text-white uppercase tracking-tighter">{currentAdSystem}</span>
                    </div>
                 </div>
               </div>
+
+              <div className="flex items-center gap-8">
+                 <div className="text-right">
+                    <span className="text-[8px] text-white/30 uppercase font-black block mb-1">OPERATION_PHASE</span>
+                    <span className="text-sm font-black text-[#00f3ff] uppercase tracking-widest">{phase}</span>
+                 </div>
+                 <div className="flex items-center gap-4 bg-[#00f3ff]/10 border border-[#00f3ff]/30 px-8 py-3 rounded shadow-[0_0_20px_rgba(0,243,255,0.2)]">
+                    <Clock size={16} className="animate-pulse text-[#00f3ff]" />
+                    <span className="text-2xl font-mono font-black tabular-nums text-white">
+                      {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}
+                    </span>
+                 </div>
+              </div>
+            </div>
+
+            {/* EXPEDITION MAIN VIEW */}
+            <div className="flex-1 flex overflow-hidden">
+               <div className="flex-1 flex flex-col p-8 gap-8 overflow-hidden relative">
+                  <div className="absolute inset-0 tactical-grid opacity-5 pointer-events-none" />
+                  
+                  {/* VIDEO PLAYER ZONE (100% OPAQUE) */}
+                  <div className="w-full max-w-4xl mx-auto flex flex-col border-2 border-[#00f3ff]/30 bg-black shadow-[0_0_100px_rgba(0,0,0,1)] relative z-10 rounded-sm overflow-hidden">
+                     <div className="bg-[#0a0a0a] p-2 flex justify-between items-center border-b border-white/5">
+                        <div className="flex items-center gap-2">
+                           <Activity size={12} className="text-red-500 animate-pulse" />
+                           <span className="text-[8px] uppercase font-bold tracking-widest text-[#00f3ff]/60">ENCRYPTION: AES_256_ACTIVE</span>
+                        </div>
+                        {isAdLoading && (
+                          <div className="flex items-center gap-2 text-yellow-500 text-[8px] font-black uppercase tracking-widest animate-pulse">
+                            <Loader2 size={10} className="animate-spin" /> SYNCHRONIZING_UPLINK...
+                          </div>
+                        )}
+                        {playerError && (
+                          <div className="flex items-center gap-2 text-red-500 text-[8px] font-black uppercase tracking-widest animate-pulse">
+                            <ShieldAlert size={10} /> {playerError}...
+                          </div>
+                        )}
+                     </div>
+                     <div className="aspect-video bg-[#000] flex items-center justify-center relative">
+                        <video ref={videoRef} className="video-js vjs-default-skin w-full h-full" playsInline muted />
+                     </div>
+                  </div>
+
+                  {/* TACTICAL COMBAT MONITOR (VISUALIZATION) */}
+                  <div className="w-full max-w-4xl mx-auto flex-1 border border-[#00f3ff]/20 bg-black/60 p-8 flex flex-col gap-8 overflow-hidden relative shadow-inner rounded-sm">
+                     <div className="flex justify-between items-center border-b border-[#00f3ff]/10 pb-4">
+                        <div className="flex items-center gap-4">
+                           <Sword size={22} className={phase === 'COMBAT' ? 'text-red-600 animate-bounce' : 'text-[#00f3ff]/10'} />
+                           <span className="text-[11px] font-black uppercase tracking-[0.5em] text-[#00f3ff]">TACTICAL_UPLINK_MONITOR_v5.2</span>
+                        </div>
+                        <div className="flex gap-4">
+                           <div className="flex items-center gap-2">
+                             <div className={`w-3 h-3 rounded-full ${phase === 'COMBAT' ? 'bg-red-600 shadow-[0_0_15px_red]' : 'bg-gray-800'}`} />
+                             <span className="text-[8px] uppercase font-bold opacity-30 tracking-widest">COMBAT</span>
+                           </div>
+                           <div className="flex items-center gap-2">
+                             <div className={`w-3 h-3 rounded-full ${phase === 'HARVESTING' ? 'bg-green-600 shadow-[0_0_15px_green]' : 'bg-gray-800'}`} />
+                             <span className="text-[8px] uppercase font-bold opacity-30 tracking-widest">HARVEST</span>
+                           </div>
+                           <div className="flex items-center gap-2">
+                             <div className={`w-3 h-3 rounded-full ${phase === 'STABILIZING' ? 'bg-[#00f3ff] shadow-[0_0_15px_#00f3ff]' : 'bg-gray-800'}`} />
+                             <span className="text-[8px] uppercase font-bold opacity-30 tracking-widest">STABLE</span>
+                           </div>
+                        </div>
+                     </div>
+
+                     <div className="flex-1 relative flex items-center justify-center">
+                        {/* COMBAT ANIMATION */}
+                        {phase === 'COMBAT' && (
+                           <div className="flex flex-col items-center gap-12 animate-in zoom-in duration-700">
+                              <div className="relative">
+                                 <div className="absolute inset-0 bg-red-600/30 blur-3xl animate-pulse" />
+                                 <Sword size={140} className="text-red-600 animate-bounce drop-shadow-[0_0_30px_red] relative z-10" />
+                                 <Zap size={50} className="absolute -top-6 -right-6 text-white animate-ping" />
+                              </div>
+                              <div className="flex gap-4 h-20 items-end">
+                                 {[...Array(24)].map((_, i) => (
+                                    <div key={i} className="w-2.5 bg-red-600/60 animate-pulse" style={{ height: `${20 + Math.random() * 80}%`, animationDelay: `${i*0.04}s` }} />
+                                 ))}
+                              </div>
+                              <p className="text-[14px] text-red-500 font-black uppercase tracking-[1.8em] animate-pulse">BREAKING_NODE_SECURITY</p>
+                           </div>
+                        )}
+
+                        {/* HARVESTING ANIMATION */}
+                        {phase === 'HARVESTING' && (
+                           <div className="flex flex-col items-center gap-12 animate-in slide-in-from-bottom-24 duration-700">
+                              <div className="flex gap-20 relative">
+                                 <div className="absolute inset-0 bg-green-500/20 blur-3xl animate-pulse" />
+                                 <Cpu size={120} className="text-green-500 animate-spin-slow drop-shadow-[0_0_30px_green]" />
+                                 <div className="flex flex-col justify-center">
+                                    <Download size={80} className="text-green-400 animate-bounce drop-shadow-[0_0_15px_green]" />
+                                 </div>
+                              </div>
+                              <div className="w-[450px] h-3 bg-white/5 rounded-full overflow-hidden border border-white/10 p-1">
+                                 <div className="h-full bg-green-500 shadow-[0_0_25px_green] animate-loading-bar rounded-full" />
+                              </div>
+                              <p className="text-[14px] text-green-500 font-black uppercase tracking-[1.8em] animate-pulse">EXTRACTING_DATA_LOOPS</p>
+                           </div>
+                        )}
+
+                        {/* STABILIZING ANIMATION */}
+                        {phase === 'STABILIZING' && (
+                           <div className="flex flex-col items-center gap-12 animate-in fade-in duration-700">
+                              <div className="relative">
+                                 <Wifi size={140} className="text-[#00f3ff] animate-pulse drop-shadow-[0_0_40px_#00f3ff]" />
+                                 <div className="absolute inset-0 bg-[#00f3ff]/20 blur-3xl" />
+                              </div>
+                              <div className="flex gap-8">
+                                 {[0, 1, 2, 3].map((i) => (
+                                    <div key={i} className="w-6 h-6 bg-[#00f3ff]/20 rounded-full flex items-center justify-center">
+                                       <div className="w-3 h-3 bg-[#00f3ff] rounded-full animate-ping" style={{ animationDelay: `${i * 0.3}s` }} />
+                                    </div>
+                                 ))}
+                              </div>
+                              <p className="text-[14px] text-[#00f3ff] font-black uppercase tracking-[1.8em] animate-pulse">FINALIZING_UPLINK</p>
+                           </div>
+                        )}
+
+                        {/* COMPLETED SUCCESS SCREEN */}
+                        {phase === 'COMPLETED' && (
+                           <div className="absolute inset-0 bg-black/98 z-50 flex flex-col items-center justify-center p-16 text-center animate-in zoom-in duration-700 border-4 border-[#00f3ff]/10">
+                              <div className="relative mb-16">
+                                 <Trophy size={180} className="text-[#00f3ff] neon-glow-cyan animate-bounce" />
+                                 <div className="absolute inset-0 bg-[#00f3ff] blur-3xl opacity-40" />
+                              </div>
+                              <h2 className="text-9xl font-black italic uppercase tracking-tighter text-white mb-10 neon-glow-cyan">UPLINK_SECURED</h2>
+                              <p className="text-base text-[#00f3ff]/60 uppercase tracking-[1em] mb-24 font-bold">Operation Completed | Reward Processed</p>
+                              <button 
+                                onClick={() => setActiveExpedition(false)}
+                                className="group relative px-40 py-14 bg-[#00f3ff] text-black font-black uppercase tracking-[1.5em] hover:bg-white transition-all shadow-[0_0_120px_rgba(0,243,255,0.7)] overflow-hidden"
+                              >
+                                <span className="relative z-10 text-2xl">DISCONNECT</span>
+                                <div className="absolute inset-0 bg-white translate-x-full group-hover:translate-x-0 transition-transform duration-500" />
+                              </button>
+                           </div>
+                        )}
+                     </div>
+
+                     {/* Overall Integrity Bar */}
+                     <div className="mt-auto space-y-6">
+                        <div className="flex justify-between text-[12px] font-black uppercase tracking-[0.8em] text-[#00f3ff]/60">
+                           <span>MISSION_INTEGRITY_CHECK</span>
+                           <span className="text-white drop-shadow-[0_0_15px_white]">{progressPercent}%</span>
+                        </div>
+                        <div className="h-4 w-full bg-white/5 relative rounded-full overflow-hidden border border-[#00f3ff]/20 p-1 shadow-inner">
+                           <div className="h-full bg-gradient-to-r from-red-600 via-[#00f3ff] to-green-600 shadow-[0_0_30px_rgba(0,243,255,0.8)] transition-all duration-1000 rounded-full" style={{ width: `${progressPercent}%` }} />
+                        </div>
+                     </div>
+                  </div>
+               </div>
+
+               {/* Log Sidebar (Vertical) */}
+               <div className="w-80 border-l border-white/5 bg-black/80 flex flex-col p-8 gap-6 z-10 backdrop-blur-3xl shadow-2xl">
+                  <div className="flex items-center gap-3 border-b border-[#00f3ff]/30 pb-4">
+                     <Activity size={20} className="text-[#00f3ff]" />
+                     <span className="text-[12px] font-black uppercase tracking-[0.5em] text-[#00f3ff]">DECRYPT_LOG_v5.2</span>
+                  </div>
+                  <div className="flex-1 overflow-y-auto space-y-7 custom-scrollbar pr-3">
+                     {logs.map(log => (
+                        <div key={log.id} className={`text-[11px] uppercase border-l-3 pl-6 py-2 animate-in slide-in-from-right-10 duration-300 ${log.type === 'success' ? 'border-green-600 text-green-400 shadow-[0_0_10px_rgba(34,197,94,0.1)]' : log.type === 'warn' ? 'border-red-600 text-red-400 shadow-[0_0_10px_rgba(220,38,38,0.1)]' : 'border-[#00f3ff]/40 text-[#00f3ff]/60'}`}>
+                           <p className="font-black leading-tight tracking-tight mb-1">{log.text}</p>
+                           <span className="text-[9px] opacity-30 font-bold">{new Date().toLocaleTimeString()}</span>
+                        </div>
+                     ))}
+                  </div>
+                  <div className="mt-auto pt-8 border-t border-white/5 flex flex-col gap-6">
+                    <div className="flex justify-between text-[9px] font-black uppercase tracking-widest opacity-40">
+                      <span>SECURE_UPLINK</span>
+                      <span>ACTIVE</span>
+                    </div>
+                    <div className="grid grid-cols-6 gap-2">
+                      {[...Array(12)].map((_, i) => (
+                        <div key={i} className="h-1.5 bg-[#00f3ff]/20 animate-pulse rounded-full" style={{ animationDelay: `${i*0.12}s` }} />
+                      ))}
+                    </div>
+                  </div>
+               </div>
             </div>
           </div>
         ) : (
           <div className="max-w-7xl mx-auto py-24 px-16 w-full h-full overflow-y-auto custom-scrollbar bg-[radial-gradient(circle_at_center,rgba(0,243,255,0.03)_0%,transparent_100%)]">
             {activeTab === 'profile' && (
-              <div className="space-y-20 animate-in slide-in-from-bottom-12 duration-1000">
-                <div className="flex flex-col lg:flex-row items-center gap-20 p-20 bg-white/[0.02] border-2 border-white/10 relative overflow-hidden group shadow-[0_0_100px_rgba(0,0,0,0.5)] rounded-lg">
+              <div className="space-y-24 animate-in slide-in-from-bottom-16 duration-1000">
+                <div className="flex flex-col lg:flex-row items-center gap-24 p-24 bg-white/[0.01] border-2 border-[#00f3ff]/20 relative overflow-hidden group rounded-lg shadow-2xl backdrop-blur-md">
                   <div className="relative shrink-0">
-                    <div className="absolute inset-0 bg-[#00f3ff] blur-[120px] opacity-10 group-hover:opacity-40 transition-opacity duration-1000" />
-                    <div className="relative w-64 h-64 border-4 border-[#00f3ff] p-4 bg-black shadow-[0_0_80px_rgba(0,243,255,0.3)] overflow-hidden group-hover:border-[#ff00ff] transition-colors duration-700">
-                      {avatarUrl ? <img src={avatarUrl} className="w-full h-full object-cover pixelated" /> : <div className="w-full h-full bg-white/5 flex items-center justify-center"><User size={120} className="text-white/10" /></div>}
-                      <div className="absolute top-0 left-0 w-full h-1 bg-[#00f3ff] animate-scanline shadow-[0_0_15px_#00f3ff]" />
+                    <div className="absolute inset-0 bg-[#00f3ff] blur-[160px] opacity-10 group-hover:opacity-30 transition-opacity duration-1000" />
+                    <div className="relative w-72 h-72 border-4 border-[#00f3ff]/40 p-5 bg-black flex items-center justify-center overflow-hidden rounded-sm shadow-[0_0_60px_rgba(0,243,255,0.15)]">
+                       <User size={160} className="text-[#00f3ff]/10" />
+                       <div className="absolute top-0 left-0 w-full h-1 bg-[#00f3ff] animate-scanline shadow-[0_0_20px_#00f3ff]" />
                     </div>
                   </div>
-                  <div className="space-y-10 relative z-10 flex-1 text-center lg:text-left">
-                    <div className="space-y-3">
-                       <span className="text-[12px] text-[#00f3ff] font-black uppercase tracking-[0.6em] opacity-40 block animate-pulse">Network_Master_Admin</span>
-                       <h2 className="text-8xl font-black text-white italic uppercase tracking-tighter neon-glow-cyan leading-none">ADMIN_77</h2>
+                  <div className="space-y-12 relative z-10 flex-1 text-center lg:text-left">
+                    <div className="space-y-5">
+                       <span className="text-[13px] text-[#00f3ff]/40 font-black uppercase tracking-[1em] block animate-pulse">Network_Master_Access</span>
+                       <h2 className="text-9xl font-black text-white italic uppercase tracking-tighter neon-glow-cyan leading-none">ADMIN_77</h2>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
-                      <div className="flex flex-col border-l-6 border-[#00f3ff] pl-10 py-3 bg-white/[0.03] backdrop-blur-md hover:bg-[#00f3ff]/5 transition-colors group/stat"><span className="text-[11px] text-[#00f3ff] font-black uppercase tracking-[0.4em] mb-3 opacity-60">MIKELA_VAL_RESERVES</span><span className="text-5xl font-black text-white tracking-tighter tabular-nums group-hover/stat:neon-glow-cyan transition-all">{mikelaReserves.toLocaleString()} MK</span></div>
-                      <div className="flex flex-col border-l-6 border-[#ff00ff] pl-10 py-3 bg-white/[0.03] backdrop-blur-md hover:bg-[#ff00ff]/5 transition-colors group/stat"><span className="text-[11px] text-[#ff00ff] font-black uppercase tracking-[0.4em] mb-3 opacity-60">GLOBAL_REPUTATION</span><span className="text-5xl font-black text-white tracking-tighter tabular-nums group-hover/stat:neon-glow-pink transition-all">{reputation.toLocaleString()} XP</span></div>
+                      <div className="flex flex-col border-l-8 border-[#00f3ff] pl-12 py-5 bg-white/[0.02] backdrop-blur-md hover:bg-[#00f3ff]/5 transition-all group/stat cursor-default rounded-r-md">
+                        <span className="text-[12px] text-[#00f3ff]/60 font-black uppercase tracking-[0.6em] mb-5">MIKELA_VAL_RESERVES</span>
+                        <span className="text-7xl font-black text-white tracking-tighter tabular-nums group-hover/stat:neon-glow-cyan transition-all">{mikelaReserves.toLocaleString()} MK</span>
+                      </div>
+                      <div className="flex flex-col border-l-8 border-[#ff00ff] pl-12 py-5 bg-white/[0.02] backdrop-blur-md hover:bg-[#ff00ff]/5 transition-all group/stat cursor-default rounded-r-md">
+                        <span className="text-[12px] text-[#ff00ff]/60 font-black uppercase tracking-[0.6em] mb-5">REPUTATION_RANK</span>
+                        <span className="text-7xl font-black text-white tracking-tighter tabular-nums group-hover/stat:neon-glow-pink transition-all">{reputation.toLocaleString()} XP</span>
+                      </div>
                     </div>
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-16">
                    {[
-                     { label: 'System Tier', val: `0x${expeditionLevel.toString(16).toUpperCase()}`, color: '#00f3ff', icon: Eye },
-                     { label: 'Purged Anomalies', val: adsDestroyed, color: '#ff00ff', icon: Zap },
-                     { label: 'VAST Integrity', val: 'STABLE', color: '#10b981', icon: Shield }
+                     { label: 'System Tier', val: `0x${expeditionLevel.toString(16).toUpperCase()}`, color: '#00f3ff', icon: Signal },
+                     { label: 'Stream Integrity', val: '99.8%', color: '#ff00ff', icon: Zap },
+                     { label: 'Node Quality', val: 'MAX_STABLE', color: '#10b981', icon: Shield }
                    ].map((stat, i) => (
-                    <div key={i} className="p-12 border-2 border-white/5 bg-white/[0.01] hover:bg-white/[0.05] transition-all hover:-translate-y-3 duration-500 group relative overflow-hidden">
-                       <span className="text-[12px] text-white/40 uppercase font-black tracking-[0.4em] block mb-6">{stat.label}</span>
-                       <p className="text-6xl font-black italic tracking-tighter group-hover:scale-110 transition-transform origin-left drop-shadow-2xl" style={{ color: stat.color }}>{stat.val}</p>
+                    <div key={i} className="p-16 border-2 border-white/5 bg-white/[0.01] hover:bg-white/[0.04] transition-all hover:-translate-y-5 duration-500 group relative overflow-hidden rounded-md shadow-2xl">
+                       <span className="text-[13px] text-white/30 uppercase font-black tracking-[0.6em] block mb-10">{stat.label}</span>
+                       <p className="text-7xl font-black italic tracking-tighter group-hover:scale-110 transition-transform origin-left drop-shadow-[0_0_20px_rgba(0,0,0,0.5)]" style={{ color: stat.color }}>{stat.val}</p>
+                       <stat.icon className="absolute bottom-6 right-6 opacity-5 group-hover:opacity-10 transition-opacity" size={100} />
                     </div>
                    ))}
                 </div>
@@ -554,53 +526,51 @@ export const GameView: React.FC = () => {
             )}
 
             {activeTab === 'expeditions' && (
-              <div className="h-full flex flex-col items-center justify-center space-y-24 animate-in zoom-in duration-1000">
-                <div className="w-full max-w-4xl text-center space-y-24 relative">
-                  <div className="absolute inset-0 bg-[#00f3ff] blur-[200px] opacity-10 animate-pulse pointer-events-none" />
-                  <div className="relative inline-block scale-125">
-                    <Compass size={240} className="text-[#00f3ff] mx-auto relative drop-shadow-[0_0_60px_rgba(0,243,255,0.7)] animate-spin-slow" />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                       <Shield size={80} className="text-[#ff00ff] animate-pulse drop-shadow-[0_0_30px_#ff00ff]" />
-                    </div>
+              <div className="h-full flex flex-col items-center justify-center space-y-28 animate-in zoom-in duration-1000">
+                <div className="w-full max-w-5xl text-center space-y-28 relative">
+                  <div className="absolute inset-0 bg-[#00f3ff] blur-[250px] opacity-10 animate-pulse pointer-events-none" />
+                  <div className="relative inline-block scale-150 group">
+                    <Compass size={240} className="text-[#00f3ff] mx-auto relative drop-shadow-[0_0_100px_rgba(0,243,255,0.7)] animate-spin-slow group-hover:animate-spin transition-all" />
                   </div>
-                  <div className="space-y-10 relative">
-                    <h2 className="text-7xl font-black text-white uppercase italic tracking-[0.4em] leading-tight neon-glow-cyan">VSTOUPIT_DO_MATRIXU</h2>
-                    <p className="text-base text-[#00f3ff]/60 max-w-2xl mx-auto leading-loose tracking-[0.3em] uppercase font-black">
-                      Detekována hluboká vrstva Sektoru 0x{expeditionLevel.toString(16).toUpperCase()}. <br/> 
-                      Nutná autorizace přes uzel <span className="text-[#ff00ff] neon-glow-pink">MULTI_AD_SWITCH</span>.
+                  <div className="space-y-14 relative">
+                    <h2 className="text-9xl font-black text-white uppercase italic tracking-[0.6em] leading-tight neon-glow-cyan drop-shadow-2xl">PRONIKNOUT</h2>
+                    <p className="text-xl text-[#00f3ff]/60 max-w-4xl mx-auto leading-relaxed tracking-[0.5em] uppercase font-black">
+                      Vstup do Sektoru 0x{expeditionLevel.toString(16).toUpperCase()} vyžaduje video-autorizaci. <br/> 
+                      <span className="text-[#ff00ff] neon-glow-pink">SYSTÉM AFK-MINING AKTIVNÍ (UPLINK LOOP)</span>.
                     </p>
                   </div>
                   <button 
-                    onClick={() => openVideoAd(true)}
-                    className="group relative px-40 py-12 border-4 border-[#00f3ff] overflow-hidden transition-all hover:bg-[#00f3ff] hover:text-black hover:scale-110 active:scale-95 shadow-[0_0_100px_rgba(0,243,255,0.4)]"
+                    onClick={startExpedition}
+                    className="group relative px-56 py-16 border-4 border-[#00f3ff] overflow-hidden transition-all hover:bg-[#00f3ff] hover:text-black hover:scale-110 active:scale-95 shadow-[0_0_140px_rgba(0,243,255,0.4)] rounded-sm"
                   >
-                    <div className="relative z-10 flex items-center gap-8">
-                       <PlayCircle size={40} className="animate-pulse" />
-                       <span className="text-4xl font-black uppercase tracking-[0.6em]">AUTORIZOVAT_START</span>
+                    <div className="relative z-10 flex items-center gap-12">
+                       <PlayCircle size={56} className="animate-pulse" />
+                       <span className="text-6xl font-black uppercase tracking-[1em]">ENTRY_LINK</span>
                     </div>
+                    <div className="absolute inset-0 bg-white translate-x-[-100%] group-hover:translate-x-0 transition-transform duration-700 opacity-20" />
                   </button>
                 </div>
               </div>
             )}
 
             {activeTab === 'items' && (
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-16 animate-in slide-in-from-right-12 duration-1000">
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-20 animate-in slide-in-from-right-16 duration-1000">
                   {upgrades.map(u => {
-                    const cost = Math.floor(u.baseCost * Math.pow(1.6, u.level - 1));
+                    const cost = Math.floor(u.baseCost * Math.pow(1.7, u.level - 1));
                     const canAfford = mikelaReserves >= cost;
                     return (
-                      <div key={u.id} className={`p-16 border-2 transition-all duration-700 flex flex-col bg-white/[0.01] group relative rounded-sm ${canAfford ? 'border-white/10 hover:border-[#ff00ff]/60 hover:bg-white/[0.04]' : 'border-white/5 opacity-40 grayscale'}`}>
-                        <div className="flex justify-between items-start mb-16">
-                          <div className="w-28 h-28 bg-black border-2 border-white/10 flex items-center justify-center shadow-[inset_0_0_50px_rgba(255,0,255,0.08)] group-hover:border-[#ff00ff]/50 transition-all">
-                            <u.icon className={canAfford ? 'text-[#ff00ff] group-hover:scale-125 transition-transform duration-500' : 'text-white/10'} size={56} />
+                      <div key={u.id} className={`p-20 border-2 transition-all duration-700 flex flex-col bg-white/[0.01] group relative rounded-md shadow-xl ${canAfford ? 'border-[#00f3ff]/20 hover:border-[#ff00ff]/60 hover:bg-white/[0.04]' : 'border-white/5 opacity-40 grayscale pointer-events-none'}`}>
+                        <div className="flex justify-between items-start mb-20">
+                          <div className="w-36 h-36 bg-black border-2 border-white/10 flex items-center justify-center shadow-[inset_0_0_60px_rgba(0,243,255,0.06)] group-hover:border-[#ff00ff]/50 transition-all rounded-sm">
+                            <u.icon className={canAfford ? 'text-[#ff00ff] group-hover:scale-125 transition-transform duration-500' : 'text-white/10'} size={72} />
                           </div>
                           <div className="text-right">
-                             <span className="text-[12px] text-white/40 font-black uppercase tracking-[0.4em] block mb-3">Upgrade_Tier</span>
-                             <span className="text-6xl font-black text-[#ff00ff] italic group-hover:neon-glow-pink transition-all duration-500">v{u.level}</span>
+                             <span className="text-[14px] text-white/40 font-black uppercase tracking-[0.6em] block mb-5">PROTOCOL_RANK</span>
+                             <span className="text-8xl font-black text-[#ff00ff] italic group-hover:neon-glow-pink transition-all duration-500">v{u.level}</span>
                           </div>
                         </div>
-                        <h4 className="text-4xl font-black text-white uppercase mb-6 tracking-tight group-hover:text-[#ff00ff] transition-colors duration-500">{u.name}</h4>
-                        <p className="text-sm text-white/30 uppercase mb-16 leading-loose tracking-[0.25em] font-black">{u.desc}</p>
+                        <h4 className="text-6xl font-black text-white uppercase mb-10 tracking-tighter group-hover:text-[#ff00ff] transition-colors duration-500 italic">{u.name}</h4>
+                        <p className="text-base text-white/30 uppercase mb-24 leading-relaxed tracking-[0.35em] font-black">{u.desc}</p>
                         <button 
                           onClick={() => {
                             if(canAfford) {
@@ -608,13 +578,12 @@ export const GameView: React.FC = () => {
                               setUpgrades(prev => prev.map(item => item.id === u.id ? {...item, level: item.level+1} : item));
                             }
                           }}
-                          disabled={!canAfford}
-                          className={`w-full py-10 border-3 font-black text-base uppercase tracking-[0.5em] transition-all mt-auto flex items-center justify-center gap-6 shadow-2xl ${canAfford ? 'border-[#ff00ff] text-[#ff00ff] hover:bg-[#ff00ff] hover:text-black shadow-[0_0_30px_rgba(255,0,255,0.2)] hover:shadow-[0_0_60px_rgba(255,255,255,0.5)]' : 'border-white/10 text-white/10'}`}
+                          className={`w-full py-14 border-4 font-black text-xl uppercase tracking-[0.8em] transition-all mt-auto flex items-center justify-center gap-10 shadow-2xl rounded-sm ${canAfford ? 'border-[#ff00ff] text-[#ff00ff] hover:bg-[#ff00ff] hover:text-black shadow-[0_0_40px_rgba(255,0,255,0.3)] hover:shadow-[0_0_80px_rgba(255,255,255,0.5)]' : 'border-white/10 text-white/10'}`}
                         >
                           {canAfford ? (
-                            <>AKTUALIZOVAT_KÓD | {cost.toLocaleString()} MK</>
+                            <>UPGRADE | {cost.toLocaleString()} MK</>
                           ) : (
-                            <><Lock size={24} /> REZERVY_VYČERPÁNY</>
+                            <><Lock size={32} /> REZERVY_LOW</>
                           )}
                         </button>
                       </div>
@@ -628,29 +597,22 @@ export const GameView: React.FC = () => {
 
       <style>{`
         .custom-scrollbar::-webkit-scrollbar { width: 8px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.8); }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #00f3ff; border-radius: 20px; border: 2px solid rgba(0,0,0,0.8); }
-        .pixelated { image-rendering: pixelated; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #00f3ff22; border-radius: 20px; border: 2px solid transparent; background-clip: content-box; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #00f3ff55; }
         .tactical-grid {
-          background-image: 
-            linear-gradient(to right, #00f3ff 1px, transparent 1px),
-            linear-gradient(to bottom, #00f3ff 1px, transparent 1px);
-          background-size: 100px 100px;
-          animation: grid-scroll 60s linear infinite;
+          background-image: linear-gradient(#00f3ff 1px, transparent 1px), linear-gradient(90deg, #00f3ff 1px, transparent 1px);
+          background-size: 60px 60px;
         }
-        .animate-spin-slow { animation: spin 25s linear infinite; }
-        .animate-scanline { animation: scanline 5s linear infinite; }
-        @keyframes scanline {
-          0% { transform: translateY(-100%); }
-          100% { transform: translateY(100vh); }
+        .animate-spin-slow { animation: spin 30s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes loading-bar {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(600%); }
         }
-        @keyframes grid-scroll {
-          from { background-position: 0 0; }
-          to { background-position: 100px 100px; }
-        }
-        .neon-glow-cyan { text-shadow: 0 0 10px #00f3ff, 0 0 20px #00f3ff; }
-        .neon-glow-pink { text-shadow: 0 0 10px #ff00ff, 0 0 20px #ff00ff; }
-        .video-js.vjs-fluid { height: 100% !important; padding-top: 0 !important; }
+        .animate-loading-bar { animation: loading-bar 4.5s infinite linear; }
+        .neon-glow-cyan { text-shadow: 0 0 15px #00f3ff, 0 0 30px #00f3ff; }
+        .neon-glow-pink { text-shadow: 0 0 15px #ff00ff, 0 0 30px #ff00ff; }
       `}</style>
     </div>
   );
