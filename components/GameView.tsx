@@ -29,7 +29,7 @@ declare global {
 const HILLTOP_VAST_URL = "https://groundedmine.com/d.mTFSzgdpGDNYvcZcGXUK/FeJm/9IuZZNUElDktPwTaYW3CNUz/YTwMNFD/ket-N/j_c/3qN/jPA/1cMuwy";
 const CLICKADILLA_VAST_URL = "https://vast.yomeno.xyz/vast?spot_id=1480488";
 const ONCLICKA_VAST_URL = "https://bid.onclckstr.com/vast?spot_id=6109953";
-// Reliable direct MP4 for the 2.5s content window
+// Stable direct MP4 link for the background content between ads
 const TEST_VIDEO_URL = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
 
 export const GameView: React.FC = () => {
@@ -48,49 +48,33 @@ export const GameView: React.FC = () => {
   const [activeExpedition, setActiveExpedition] = useState(false);
   const [phase, setPhase] = useState<ExpeditionPhase>('COMBAT');
   const [timeLeft, setTimeLeft] = useState(0);
-  const [totalTime, setTotalTime] = useState(0);
+  const [totalTime, setTotalTime] = useState(180); // 3 minutes as requested
   const [logs, setLogs] = useState<ExpeditionLog[]>([]);
+  
+  // Ad Rotation States
   const [currentAdSystem, setCurrentAdSystem] = useState<AdSystem>('HILLTOP');
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [nextRotationIn, setNextRotationIn] = useState(60);
   const [isAdPlaying, setIsAdPlaying] = useState(false);
-  const [playerError, setPlayerError] = useState<string | null>(null);
-  const [isContentPhase, setIsContentPhase] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerInstance = useRef<any>(null);
-  const loadWatchdog = useRef<number | null>(null);
-  const cycleInitiated = useRef<boolean>(false);
-
-  // Scaling logic
-  const calculateDuration = (lvl: number) => {
-    if (lvl <= 10) return 60 + (lvl - 1) * 30;
-    const baseAtLevel10 = 60 + 9 * 30; 
-    return baseAtLevel10 + (lvl - 10) * 60;
-  };
 
   const addLog = (text: string, type: 'info' | 'warn' | 'success' | 'error' = 'info') => {
     setLogs(prev => [{ id: Math.random().toString(), text, type }, ...prev].slice(0, 15));
   };
 
-  const cycleSystem = () => {
-    if (cycleInitiated.current) return;
-    cycleInitiated.current = true;
-    
-    setCurrentAdSystem(prev => {
-      if (prev === 'HILLTOP') return 'CLICKADILLA';
-      if (prev === 'CLICKADILLA') return 'ONCLICKA';
-      return 'HILLTOP';
-    });
-  };
-
   const startExpedition = () => {
-    const duration = calculateDuration(expeditionLevel);
+    const duration = 180; // Hard 3 minutes
     setTotalTime(duration);
     setTimeLeft(duration);
     setActiveExpedition(true);
     setPhase('COMBAT');
     setLogs([]);
+    setRefreshKey(0);
+    setNextRotationIn(60);
     addLog(`Navazování spojení se Sektorem 0x${expeditionLevel.toString(16).toUpperCase()}`, 'info');
-    addLog(`PŘÍSNÝ CYKLUS: Reklama (100%) -> Video (2s) -> Rotace`, 'warn');
+    addLog(`Uplink Mode: 60s Node-Rotation aktivní.`, 'warn');
   };
 
   const finishExpedition = () => {
@@ -110,9 +94,9 @@ export const GameView: React.FC = () => {
     }
   };
 
-  // Video Ad Rotation Logic
+  // Player Lifecycle & 60s Rotation Logic
   useEffect(() => {
-    if (!activeExpedition || phase === 'COMPLETED' || phase === 'FAILED') return;
+    if (!activeExpedition || phase === 'COMPLETED') return;
 
     const vastUrls: Record<AdSystem, string> = {
       HILLTOP: HILLTOP_VAST_URL,
@@ -120,38 +104,23 @@ export const GameView: React.FC = () => {
       ONCLICKA: ONCLICKA_VAST_URL
     };
 
-    const handlePlayerError = (err: any) => {
-      console.warn(`[SYSTEM] Chyba u partnera ${currentAdSystem}:`, err);
-      addLog(`Uzel ${currentAdSystem} neodpovídá. Přeskakuji k dalšímu...`, 'warn');
-      setPlayerError("NODE_BYPASS");
-      setIsAdPlaying(false);
-      
-      if (loadWatchdog.current) window.clearTimeout(loadWatchdog.current);
-
-      setTimeout(() => {
-        setPlayerError(null);
-        cycleSystem();
-      }, 1000);
+    const handleRotation = () => {
+      addLog(`60s interval vypršel. Rotuji k dalšímu partnerovi...`, 'info');
+      setCurrentAdSystem(prev => {
+        if (prev === 'HILLTOP') return 'CLICKADILLA';
+        if (prev === 'CLICKADILLA') return 'ONCLICKA';
+        return 'HILLTOP';
+      });
+      setRefreshKey(k => k + 1);
+      setNextRotationIn(60);
     };
 
     const initPlayer = () => {
       if (!videoRef.current || !window.fluidPlayer) return;
 
-      setIsContentPhase(false);
-      setIsAdPlaying(false);
-      cycleInitiated.current = false;
-
-      // Watchdog only for INITIAL LOAD. If ad doesn't start in 10s, cycle.
-      if (loadWatchdog.current) window.clearTimeout(loadWatchdog.current);
-      loadWatchdog.current = window.setTimeout(() => {
-        if (!isAdPlaying && !isContentPhase) {
-           handlePlayerError("LOAD_TIMEOUT");
-        }
-      }, 12000);
-
       try {
         if (playerInstance.current) {
-          try { playerInstance.current.destroy(); } catch(e) {}
+          playerInstance.current.destroy();
         }
 
         playerInstance.current = window.fluidPlayer(videoRef.current, {
@@ -170,47 +139,45 @@ export const GameView: React.FC = () => {
             adList: [{ roll: 'preRoll', vastTag: vastUrls[currentAdSystem] }],
             adStartedCallback: () => {
               setIsAdPlaying(true);
-              setIsContentPhase(false);
-              setPlayerError(null);
-              // Clear load watchdog - ad is now playing and must finish.
-              if (loadWatchdog.current) window.clearTimeout(loadWatchdog.current);
-              addLog(`Uzel ${currentAdSystem}: Reklama aktivní. Čekám na dokončení...`, 'info');
+              addLog(`Uzel ${currentAdSystem}: Přehrávám autorizační reklamu...`, 'info');
             },
             adFinishedCallback: () => {
               setIsAdPlaying(false);
-              setIsContentPhase(true);
-              addLog(`Uzel ${currentAdSystem} dokončen. Přenáším pakety...`, 'success');
-              // Player automatically starts content video here.
+              addLog(`Uzel ${currentAdSystem} ověřen. Sběr dat aktivní.`, 'success');
             },
-            adErrorCallback: (err: any) => handlePlayerError(err)
+            adErrorCallback: (err: any) => {
+              console.warn("VAST Error:", err);
+              setIsAdPlaying(false);
+              addLog(`Uzel ${currentAdSystem} nedostupný. Čekám na další rotaci...`, 'error');
+            }
           }
         });
       } catch (e) {
-        handlePlayerError(e);
+        console.error("Player Init Error:", e);
       }
     };
 
     initPlayer();
 
+    // Rotation timer for the current player instance
+    const rotationTimer = setInterval(() => {
+      setNextRotationIn(prev => {
+        if (prev <= 1) {
+          handleRotation();
+          return 60;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
     return () => {
-      if (loadWatchdog.current) window.clearTimeout(loadWatchdog.current);
+      clearInterval(rotationTimer);
       if (playerInstance.current) {
         try { playerInstance.current.destroy(); } catch(e) {}
         playerInstance.current = null;
       }
     };
-  }, [activeExpedition, currentAdSystem, phase]);
-
-  // Video Content Monitor: Play exactly 2.5s and then switch to next ad partner
-  const handleTimeUpdate = () => {
-    if (!videoRef.current || isAdPlaying || !isContentPhase || cycleInitiated.current) return;
-    
-    // Check if the test video has played for enough time to trigger the next cycle
-    if (videoRef.current.currentTime >= 2.5) {
-      addLog("Synchronizace paketu hotova. Rotuji zdroj signálu...", "info");
-      cycleSystem();
-    }
-  };
+  }, [activeExpedition, refreshKey, currentAdSystem, phase]);
 
   // Global Mission Timer
   useEffect(() => {
@@ -219,7 +186,7 @@ export const GameView: React.FC = () => {
     const interval = setInterval(() => {
       setTimeLeft(prev => {
         const next = prev - 1;
-        const progress = ((totalTime - next) / totalTime) * 100;
+        const progress = ((180 - next) / 180) * 100;
         
         if (progress < 35) setPhase('COMBAT');
         else if (progress < 85) setPhase('HARVESTING');
@@ -234,12 +201,11 @@ export const GameView: React.FC = () => {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [activeExpedition, timeLeft, totalTime, phase]);
+  }, [activeExpedition, timeLeft]);
 
   const progressPercent = useMemo(() => {
-    if (totalTime === 0) return 0;
-    return Math.floor(((totalTime - timeLeft) / totalTime) * 100);
-  }, [timeLeft, totalTime]);
+    return Math.floor(((180 - timeLeft) / 180) * 100);
+  }, [timeLeft]);
 
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
@@ -280,17 +246,17 @@ export const GameView: React.FC = () => {
                 </div>
                 <div className="h-8 w-px bg-white/10" />
                 <div className="flex flex-col">
-                   <span className="text-[8px] text-[#ff00ff]/40 uppercase font-black tracking-widest">CURRENT_SOURCE</span>
+                   <span className="text-[8px] text-[#ff00ff]/40 uppercase font-black tracking-widest">NODE_ROTATION_60s</span>
                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${isAdPlaying ? 'bg-[#ff00ff] animate-ping' : 'bg-green-500 animate-pulse'}`} />
-                      <span className="text-xs font-bold text-white uppercase tracking-tighter">{currentAdSystem}</span>
+                      <div className="w-2 h-2 rounded-full bg-[#ff00ff] animate-ping" />
+                      <span className="text-xs font-bold text-white uppercase tracking-tighter">{currentAdSystem} ({nextRotationIn}s)</span>
                    </div>
                 </div>
               </div>
 
               <div className="flex items-center gap-8">
                  <div className="text-right">
-                    <span className="text-[8px] text-white/30 uppercase font-black block mb-1">OPERATION_PHASE</span>
+                    <span className="text-[8px] text-white/30 uppercase font-black block mb-1">PHASE</span>
                     <span className="text-sm font-black text-[#00f3ff] uppercase tracking-widest">{phase}</span>
                  </div>
                  <div className="flex items-center gap-4 bg-[#00f3ff]/10 border border-[#00f3ff]/30 px-8 py-3 rounded shadow-[0_0_20px_rgba(0,243,255,0.2)]">
@@ -307,31 +273,26 @@ export const GameView: React.FC = () => {
                <div className="flex-1 flex flex-col p-8 gap-8 overflow-hidden relative">
                   <div className="absolute inset-0 tactical-grid opacity-5 pointer-events-none" />
                   
-                  {/* VIDEO PLAYER ZONE (100% OPAQUE) */}
+                  {/* VIDEO PLAYER ZONE */}
                   <div className="w-full max-w-4xl mx-auto flex flex-col border-2 border-[#00f3ff]/30 bg-black shadow-[0_0_100px_rgba(0,0,0,1)] relative z-10 rounded-sm overflow-hidden">
                      <div className="bg-[#0a0a0a] p-2 flex justify-between items-center border-b border-white/5">
                         <div className="flex items-center gap-2">
                            <Activity size={12} className="text-red-500 animate-pulse" />
-                           <span className="text-[8px] uppercase font-bold tracking-widest text-[#00f3ff]/60 italic">STATUS: {isAdPlaying ? 'MANDATORY_AUTH_IN_PROGRESS' : isContentPhase ? 'DATA_TRANSFER_ACTIVE' : 'INITIALIZING_SIGNAL'}</span>
+                           <span className="text-[8px] uppercase font-bold tracking-widest text-[#00f3ff]/60 italic">
+                             {isAdPlaying ? 'SECURITY_BYPASS_IN_PROGRESS' : 'SYNCHRONIZING_DATA_STREAM'}
+                           </span>
                         </div>
-                        {isContentPhase && (
-                          <div className="flex items-center gap-2 text-[#00f3ff] text-[8px] font-black uppercase tracking-widest animate-pulse">
-                            <Loader2 size={10} className="animate-spin" /> SYNCING...
-                          </div>
-                        )}
-                        {playerError && (
-                          <div className="flex items-center gap-2 text-red-500 text-[8px] font-black uppercase tracking-widest animate-pulse">
-                            <ShieldAlert size={10} /> {playerError}...
-                          </div>
-                        )}
+                        <div className="flex items-center gap-2 text-[#00f3ff] text-[8px] font-black uppercase tracking-widest animate-pulse">
+                           <RefreshCw size={10} className="animate-spin" /> NEXT_NODE: {nextRotationIn}s
+                        </div>
                      </div>
                      <div className="aspect-video bg-[#000] flex items-center justify-center relative">
                         <video 
+                          key={refreshKey}
                           ref={videoRef} 
                           className="video-js vjs-default-skin w-full h-full" 
                           playsInline 
                           muted 
-                          onTimeUpdate={handleTimeUpdate}
                         >
                            <source src={TEST_VIDEO_URL} type="video/mp4" />
                         </video>
@@ -476,7 +437,7 @@ export const GameView: React.FC = () => {
                     <h2 className="text-9xl font-black text-white uppercase italic tracking-[0.6em] leading-tight neon-glow-cyan">PRONIKNOUT</h2>
                     <p className="text-xl text-[#00f3ff]/60 max-w-4xl mx-auto leading-relaxed tracking-[0.5em] uppercase font-black">
                       Vstup do Sektoru 0x{expeditionLevel.toString(16).toUpperCase()} vyžaduje video-autorizaci. <br/> 
-                      <span className="text-[#ff00ff] neon-glow-pink">SYSTÉM AFK-MINING AKTIVNÍ (UPLINK LOOP)</span>.
+                      <span className="text-[#ff00ff] neon-glow-pink">SYSTÉM AFK-MINING AKTIVNÍ (3 MINUTY)</span>.
                     </p>
                   </div>
                   <button 
