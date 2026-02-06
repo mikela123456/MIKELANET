@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-// Added missing imports: Truck, RefreshCw, AlertTriangle
 import { User, Compass, Package, Zap, Timer, Trophy, Clock, Coins, X, Terminal, Database, PlayCircle, Lock, Eye, Signal, Loader2, Truck, RefreshCw, AlertTriangle } from 'lucide-react';
 import { AdBanner } from './AdBanner';
 
@@ -35,7 +34,7 @@ declare global {
 }
 
 const VIDEO_AD_URL = "https://groundedmine.com/dpmzFbz/d.GANRvbZjGiUS/ieemF9tu/ZOUCl_k/PVTpYG3_NWzeYNwEN/DQkwtsNFjccn3wN/jdA/1OMDwf";
-const AD_WATCH_DURATION = 60; 
+const AD_WATCH_DURATION = 60; // Nastaveno na 60 sekund dle požadavku
 
 export const GameView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<GameTab>('profile');
@@ -77,52 +76,50 @@ export const GameView: React.FC = () => {
     setVideoAdTimer(AD_WATCH_DURATION);
   };
 
-  // Fluid Player Initialization
+  // Fluid Player Logic - Čistá inicializace hned po otevření
   useEffect(() => {
     if (videoAdVisible && videoElementRef.current && window.fluidPlayer) {
-      const init = () => {
-        if (playerRef.current) return;
+      // Malé zpoždění pro zajištění renderování DOM
+      const timer = setTimeout(() => {
+        if (!videoElementRef.current) return;
         
-        playerRef.current = window.fluidPlayer(videoElementRef.current, {
-          layoutControls: {
-            fillToContainer: true,
-            autoPlay: true,
-            mute: true,
-            allowDownload: false,
-            playbackRateControl: false,
-            persistentSettings: { volume: false },
-            adProgressbarColor: '#00f3ff',
-            primaryColor: '#00f3ff',
-            controlBar: {
-              autoHide: true,
-              animated: true
-            }
-          },
-          vastOptions: {
-            allowVPAID: true,
-            vpaidMode: 'insecure',
-            adList: [
-              {
-                roll: 'preRoll',
-                vastTag: VIDEO_AD_URL
+        try {
+          playerRef.current = window.fluidPlayer(videoElementRef.current, {
+            layoutControls: {
+              fillToContainer: true,
+              autoPlay: true,
+              mute: true,
+              allowDownload: false,
+              playbackRateControl: false,
+              persistentSettings: { volume: false },
+              adProgressbarColor: '#00f3ff',
+              primaryColor: '#00f3ff',
+              controlBar: {
+                autoHide: true,
+                animated: true
               }
-            ],
-            adStartedCallback: () => {
-              addLog("Reklama spuštěna - Autorizace probíhá.", "info");
             },
-            adErrorCallback: (err: any) => {
-              console.error("VAST Load Error:", err);
-              addLog("Chyba načítání reklamy.", "error");
+            vastOptions: {
+              allowVPAID: true,
+              adList: [
+                {
+                  roll: 'preRoll',
+                  vastTag: VIDEO_AD_URL
+                }
+              ]
             }
-          }
-        });
-      };
+          });
+        } catch (e) {
+          console.error("Fluid Player Error:", e);
+        }
+      }, 100);
 
-      const timer = setTimeout(init, 300);
       return () => {
         clearTimeout(timer);
         if (playerRef.current) {
-          playerRef.current.destroy();
+          try {
+            playerRef.current.destroy();
+          } catch (e) {}
           playerRef.current = null;
         }
       };
@@ -130,13 +127,13 @@ export const GameView: React.FC = () => {
   }, [videoAdVisible]);
 
   useEffect(() => {
-    let timerId: number;
+    let interval: number;
     if (videoAdVisible && videoAdTimer > 0) {
-      timerId = window.setInterval(() => {
+      interval = window.setInterval(() => {
         setVideoAdTimer(prev => prev - 1);
       }, 1000);
     }
-    return () => clearInterval(timerId);
+    return () => clearInterval(interval);
   }, [videoAdVisible, videoAdTimer]);
 
   const claimVideoReward = () => {
@@ -229,32 +226,45 @@ export const GameView: React.FC = () => {
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
-      {/* VIDEO AD MODAL - PŘESNĚ PODLE SCREENSHOTU */}
+      {/* VIDEO AD MODAL - EXACT REPRODUCTION FROM SCREENSHOT */}
       {videoAdVisible && (
-        <div className="fixed inset-0 z-[1000] flex flex-col bg-black animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-[1000] flex flex-col bg-black">
           
-          {/* TOP BAR */}
-          <div className="w-full h-16 bg-black flex items-center justify-between px-6 shrink-0">
+          {/* HEADER BAR */}
+          <header className="w-full h-16 bg-black border-b border-white/5 flex items-center justify-between px-6 shrink-0">
             <div className="flex items-center gap-3">
-              <div className="w-2 h-2 rounded-full bg-[#ff00ff] shadow-[0_0_8px_#ff00ff]" />
-              <span className="text-[10px] text-[#00f3ff] font-bold tracking-[0.2em] uppercase">
-                UPLINK_ACTIVE // AUTORIZACE STARTU
+              <div className="flex items-center gap-1 opacity-60">
+                <div className="w-[1px] h-3 bg-[#00f3ff]" />
+                <div className="w-[1px] h-2 bg-[#00f3ff]" />
+                <div className="w-[1px] h-4 bg-[#00f3ff]" />
+              </div>
+              <span className="text-[10px] text-[#00f3ff] font-bold tracking-[0.25em] uppercase">
+                NODE_UPLINK_A77 <span className="mx-2 opacity-30">|</span> AUTORIZACE VSTUPU DO SEKTORU
               </span>
             </div>
+            
             <div className="flex flex-col items-end">
-              <span className="text-[8px] text-white/40 uppercase tracking-widest leading-none mb-1">Verifikace spojení</span>
-              <span className="text-xl font-black text-[#00f3ff] leading-none tracking-wider neon-glow-cyan tabular-nums">
-                {videoAdTimer > 0 ? `${videoAdTimer}s` : 'DONE'}
-              </span>
+               <span className="text-[9px] text-white/30 uppercase tracking-[0.2em] mb-1">VERIFIKACE OKNA</span>
+               <span className={`text-2xl font-black tabular-nums transition-colors ${videoAdTimer > 0 ? 'text-[#00f3ff]' : 'text-green-500'}`}>
+                 {videoAdTimer}s
+               </span>
             </div>
-          </div>
+          </header>
 
-          {/* VIDEO CONTAINER */}
-          <div className="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
-             <div className="w-full h-full">
+          {/* MAIN PLAYER AREA */}
+          <main className="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
+             {/* Loader visible until ad starts */}
+             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
+               <div className="w-12 h-12 border-2 border-t-[#00f3ff] border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin mb-4" />
+               <span className="text-[10px] text-[#00f3ff] font-black tracking-[0.3em] uppercase opacity-40">
+                 NAVÁZUJI SPOJENÍ S HILLTOPADS...
+               </span>
+             </div>
+
+             <div className="w-full h-full relative z-20">
                 <video 
-                  ref={videoElementRef} 
-                  id="ad-video-element"
+                  ref={videoElementRef}
+                  id="fluid-ad-player-element"
                   className="w-full h-full object-contain"
                   autoPlay
                   muted
@@ -263,36 +273,36 @@ export const GameView: React.FC = () => {
                   <source src="" type="video/mp4" />
                 </video>
              </div>
-             
-             {/* Cross Button - Only visible when timer hits zero */}
-             {videoAdTimer <= 0 && (
-               <button 
-                onClick={() => setVideoAdVisible(false)}
-                className="absolute top-4 right-4 z-[1010] w-10 h-10 flex items-center justify-center bg-black/60 border border-white/20 text-white hover:bg-[#ff00ff]/20"
-               >
-                 <X size={24} />
-               </button>
-             )}
-          </div>
+          </main>
 
-          {/* BOTTOM BAR */}
-          <div className="w-full h-14 bg-black flex items-center justify-center shrink-0">
-             {videoAdTimer > 0 ? (
-               <div className="flex items-center gap-2 opacity-60">
-                 <RefreshCw size={12} className="text-[#00f3ff] animate-spin" />
-                 <span className="text-[10px] text-[#00f3ff] uppercase tracking-[0.2em]">
-                   Sledujte reklamu pro získání odměny...
-                 </span>
+          {/* FOOTER BAR */}
+          <footer className="w-full h-16 bg-black border-t border-white/5 flex items-center justify-center shrink-0">
+            {videoAdTimer > 0 ? (
+               <div className="flex items-center gap-3 opacity-40">
+                  <div className="w-1 h-1 bg-[#00f3ff] rounded-full animate-pulse" />
+                  <span className="text-[10px] text-white uppercase tracking-[0.4em] font-bold">
+                    SLEDUJTE PŘENOS PRO AUTORIZACI ODMĚNY...
+                  </span>
                </div>
-             ) : (
-               <button 
+            ) : (
+              <button 
                 onClick={claimVideoReward}
-                className="px-12 py-2 bg-[#00f3ff] text-black font-black uppercase tracking-[0.4em] text-xs hover:bg-white transition-all shadow-[0_0_20px_#00f3ff60]"
-               >
-                 Potvrdit příjem
-               </button>
-             )}
-          </div>
+                className="group relative px-20 py-3 bg-[#00f3ff] text-black font-black uppercase tracking-[0.5em] text-sm hover:bg-white transition-all shadow-[0_0_30px_#00f3ff80]"
+              >
+                POTVRDIT PŘÍJEM
+              </button>
+            )}
+            
+            {/* Close button only after timer */}
+            {videoAdTimer <= 0 && (
+              <button 
+                onClick={() => setVideoAdVisible(false)}
+                className="absolute right-6 w-10 h-10 flex items-center justify-center bg-white/10 hover:bg-red-500 text-white transition-colors"
+              >
+                <X size={20} />
+              </button>
+            )}
+          </footer>
         </div>
       )}
 
@@ -474,7 +484,7 @@ export const GameView: React.FC = () => {
           position: absolute !important;
           top: 0 !important;
           left: 0 !important;
-          z-index: 10 !important;
+          z-index: 20 !important;
         }
       `}</style>
     </div>
