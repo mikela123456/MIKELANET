@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { User, Zap, Compass, Truck, Timer, Trophy, Shield, Activity, Clock, Database, PlayCircle, Lock, Signal, Sword, Cpu, Download, Wifi, AlertTriangle, ShieldAlert, Loader2, RefreshCw } from 'lucide-react';
+import { User, Zap, Compass, Truck, Timer, Trophy, Shield, Activity, Clock, Database, PlayCircle, Lock, Signal, Sword, Cpu, Wifi, RefreshCw, Loader2 } from 'lucide-react';
 
 type GameTab = 'profile' | 'expeditions' | 'items';
 type ExpeditionPhase = 'COMBAT' | 'HARVESTING' | 'STABILIZING' | 'COMPLETED' | 'FAILED';
@@ -30,12 +30,13 @@ const HILLTOP_VAST_URL = "https://groundedmine.com/d.mTFSzgdpGDNYvcZcGXUK/FeJm/9
 const CLICKADILLA_VAST_URL = "https://vast.yomeno.xyz/vast?spot_id=1480488";
 const ONCLICKA_VAST_URL = "https://bid.onclckstr.com/vast?spot_id=6109953";
 
-// Požadovaný YouTube odkaz
-const YOUTUBE_ID = "Yn15g_3J1JA";
+// Lokální soubor v hlavní složce
+const LOCAL_VIDEO_SRC = "/MIKELANET.mp4";
 
 /**
- * Samostatná komponenta VideoStation, která spravuje životní cyklus reklamy a videa.
- * Je izolovaná od stavu expedice, takže její restart (každých 60s) neovlivní postup hrou.
+ * Komponenta AFK modulu - VideoStation.
+ * Zajišťuje přehrávání reklamy -> následně MIKELANET.mp4.
+ * Resetuje se každých 50 sekund (zavření/otevření).
  */
 const VideoStation: React.FC<{ 
   system: AdSystem, 
@@ -43,7 +44,7 @@ const VideoStation: React.FC<{
   onLog: (msg: string, type: any) => void 
 }> = ({ system, nodeKey, onLog }) => {
   const [isAdPlaying, setIsAdPlaying] = useState(false);
-  const [showYoutube, setShowYoutube] = useState(false);
+  const [showLocalContent, setShowLocalContent] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -55,120 +56,133 @@ const VideoStation: React.FC<{
     ONCLICKA: ONCLICKA_VAST_URL
   };
 
-  // Inicializace a Cleanup přehrávače při každé změně nodeKey (každých 60s)
   useEffect(() => {
     let isMounted = true;
 
-    const cleanup = () => {
+    const cleanupPlayer = () => {
       document.body.classList.remove('ad-playing');
       if (playerRef.current) {
         try {
           playerRef.current.destroy();
         } catch (e) {
-          console.warn("Cleanup error:", e);
+          console.warn("Player cleanup warning:", e);
         }
         playerRef.current = null;
       }
     };
 
-    const init = async () => {
+    const initStation = async () => {
+      // 1. Vizualizace "Zavření" okna
       setIsTransitioning(true);
-      setShowYoutube(false);
+      setShowLocalContent(false);
       setIsAdPlaying(false);
-      cleanup();
+      cleanupPlayer();
 
-      // Krátká pauza pro čistou re-inicializaci DOMu
+      // Krátká pauza pro efekt vypnutí a vyčištění paměti
       await new Promise(r => setTimeout(r, 800));
       
       if (!isMounted || !videoRef.current || !window.fluidPlayer) return;
 
       try {
         setIsTransitioning(false);
+        // 2. "Otevření" okna a re-inicializace
         playerRef.current = window.fluidPlayer(videoRef.current, {
           layoutControls: {
             fillToContainer: true,
             autoPlay: true,
-            mute: false, // ZVUK VŽDY ZAPNUT dle požadavku
+            mute: false, // Požadavek: ZVUK ZAPNUT
             allowDownload: false,
             playbackRateControl: false,
             controlBar: { autoHide: true },
             playButtonShowing: false,
+            // Prevence chyby "Unknown in-stream ad type" u některých VAST response
+            htmlOnPauseBlock: {
+                html: null,
+                width: 0,
+                height: 0
+            }
           },
           vastOptions: {
             adList: [{ roll: 'preRoll', vastTag: vastUrls[system] }],
             adStartedCallback: () => {
               setIsAdPlaying(true);
-              document.body.classList.add('ad-playing'); // Skryje CRT filtry a scanlines v index.html
-              onLog(`[SYSTÉM] Uzel ${system}: Reklama aktivní (ZVUK ON).`, 'info');
+              document.body.classList.add('ad-playing');
+              onLog(`[Uzel ${system}] Autorizace zahájena. Reklama aktivní.`, 'info');
             },
             adFinishedCallback: () => {
               setIsAdPlaying(false);
               document.body.classList.remove('ad-playing');
-              setShowYoutube(true);
-              onLog(`[SYSTÉM] Uzel ${system}: Verifikace úspěšná. Spouštím YT stream.`, 'success');
+              setShowLocalContent(true);
+              onLog(`[Uzel ${system}] Verifikace dokončena. Spouštím MIKELANET.mp4`, 'success');
+              
+              // Po reklamě zajistíme, aby se lokální video spustilo
+              if (videoRef.current) {
+                videoRef.current.src = LOCAL_VIDEO_SRC;
+                videoRef.current.play().catch(e => console.error("AutoPlay local failed:", e));
+              }
             },
-            adErrorCallback: () => {
+            adErrorCallback: (err: any) => {
+              console.error("Ad-Type / VAST Error:", err);
               setIsAdPlaying(false);
               document.body.classList.remove('ad-playing');
-              setShowYoutube(true);
-              onLog(`[SYSTÉM] Uzel ${system}: Ad-Uplink selhal. Nouzové video aktivováno.`, 'error');
+              setShowLocalContent(true);
+              onLog(`[Uzel ${system}] Ad-Stream Error. Bypass na MIKELANET.mp4`, 'error');
+              
+              if (videoRef.current) {
+                videoRef.current.src = LOCAL_VIDEO_SRC;
+                videoRef.current.play().catch(e => console.error("AutoPlay fallback failed:", e));
+              }
             }
           }
         });
       } catch (err) {
-        console.error("FluidPlayer Init Fail:", err);
+        console.error("Initialization Error:", err);
       }
     };
 
-    init();
+    initStation();
 
     return () => {
       isMounted = false;
-      cleanup();
+      cleanupPlayer();
     };
   }, [nodeKey, system]);
 
   return (
-    <div className="w-full max-w-4xl mx-auto flex flex-col border-2 border-[#00f3ff]/40 bg-black shadow-[0_0_80px_rgba(0,0,0,1)] relative z-50 rounded-sm overflow-hidden">
+    <div className="w-full max-w-4xl mx-auto flex flex-col border-2 border-[#00f3ff]/40 bg-black shadow-[0_0_80px_rgba(0,0,0,0.8)] relative z-50 rounded-sm overflow-hidden">
+      {/* Header Stanice */}
       <div className="bg-[#050505] p-2 flex justify-between items-center border-b border-[#00f3ff]/20">
         <div className="flex items-center gap-3">
           <div className={`w-2 h-2 rounded-full ${isAdPlaying ? 'bg-red-500 animate-pulse shadow-[0_0_10px_red]' : 'bg-[#00f3ff] shadow-[0_0_10px_#00f3ff]'}`} />
           <span className="text-[9px] uppercase font-black tracking-[0.2em] text-[#00f3ff]/80">
-            {isAdPlaying ? 'AUTORIZAČNÍ_REKLAMA_AKTIVNÍ' : 'DATA_UPLINK_STABILNÍ'}
+            {isAdPlaying ? 'UPLINK_DECRYPTION_IN_PROGRESS' : 'LOCAL_UPLINK_STABLE'}
           </span>
         </div>
         <div className="flex items-center gap-2 text-[#00f3ff] text-[9px] font-black uppercase tracking-widest opacity-60">
-           NODE: {system} | UPLINK_v7.2
+           {system} | v9.0_REBOOT_FIX
         </div>
       </div>
       
       <div className="aspect-video bg-black flex items-center justify-center relative">
+        {/* Vizualizace Rebootu */}
         {isTransitioning && (
           <div className="absolute inset-0 z-[100] bg-black flex flex-col items-center justify-center gap-4 animate-in fade-in zoom-in duration-300">
              <RefreshCw className="text-[#00f3ff] animate-spin" size={48} />
-             <span className="text-[10px] font-black tracking-[0.6em] text-[#00f3ff] animate-pulse uppercase">RE-INITIALIZING_NODE...</span>
+             <span className="text-[10px] font-black tracking-[0.6em] text-[#00f3ff] animate-pulse uppercase">REBOOTING_50S_CYCLE...</span>
           </div>
         )}
 
-        {showYoutube && !isTransitioning && (
-          <iframe 
-            className="absolute inset-0 w-full h-full z-50 animate-in fade-in duration-500"
-            src={`https://www.youtube.com/embed/${YOUTUBE_ID}?autoplay=1&mute=0&controls=0&modestbranding=1&rel=0&showinfo=0`}
-            title="Uplink Stream"
-            frameBorder="0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
-        )}
-        
-        {/* HTML5 Player pro reklamy */}
-        <div className={`w-full h-full ${showYoutube || isTransitioning ? 'opacity-0 scale-95' : 'opacity-100 scale-100'} transition-all duration-500`}>
+        {/* Hlavní video element pro Fluid Player i lokální video */}
+        <div className={`w-full h-full ${isTransitioning ? 'opacity-0 scale-95' : 'opacity-100 scale-100'} transition-all duration-500`}>
           <video 
             ref={videoRef} 
             className="video-js vjs-default-skin w-full h-full" 
             playsInline 
+            controls={showLocalContent}
+            loop={showLocalContent}
           >
-            {/* Žádný source - FluidPlayer si reklamní stream vloží sám */}
+            {/* Source se dynamicky mění v useEffectu */}
+            <source src={showLocalContent ? LOCAL_VIDEO_SRC : ""} type="video/mp4" />
           </video>
         </div>
       </div>
@@ -193,10 +207,9 @@ export const GameView: React.FC = () => {
   const [timeLeft, setTimeLeft] = useState(180); 
   const [logs, setLogs] = useState<ExpeditionLog[]>([]);
   
-  // Stavy pro rotaci přehrávače
   const [currentAdSystem, setCurrentAdSystem] = useState<AdSystem>('HILLTOP');
   const [nodeKey, setNodeKey] = useState(0);
-  const [cycleTimer, setCycleTimer] = useState(60);
+  const [cycleTimer, setCycleTimer] = useState(50); // Striktní 50s cyklus
 
   const addLog = (text: string, type: 'info' | 'warn' | 'success' | 'error' = 'info') => {
     setLogs(prev => [{ id: Math.random().toString(), text, type }, ...prev].slice(0, 15));
@@ -208,9 +221,9 @@ export const GameView: React.FC = () => {
     setPhase('COMBAT');
     setLogs([]);
     setNodeKey(k => k + 1);
-    setCycleTimer(60);
-    addLog(`Navazování spojení se Sektorem 0x${expeditionLevel.toString(16).toUpperCase()}`, 'info');
-    addLog(`AFK-Mining modul aktivován. Cyklus 60s spuštěn.`, 'warn');
+    setCycleTimer(50);
+    addLog(`Navázáno spojení se sektorem 0x${expeditionLevel.toString(16).toUpperCase()}`, 'info');
+    addLog(`AFK-Mining modul aktivován. Reboot cyklus nastaven na 50s.`, 'warn');
   };
 
   const finishExpedition = () => {
@@ -222,25 +235,25 @@ export const GameView: React.FC = () => {
     setReputation(p => p + expeditionLevel * 60);
     setExpeditionLevel(p => p + 1);
     setPhase('COMPLETED');
-    addLog(`Operace úspěšná! Fragmenty zajištěny: +${totalReward} MK`, 'success');
+    addLog(`Operace dokončena. Data zajištěna. Výnos: +${totalReward} MK`, 'success');
   };
 
-  // Nezávislý 60s cyklus rotace partnerů
+  // Nezávislý 50s cyklus rebootu (zavření a otevření přehrávače)
   useEffect(() => {
     if (!activeExpedition || phase === 'COMPLETED') return;
 
     const interval = setInterval(() => {
       setCycleTimer(prev => {
         if (prev <= 1) {
-          // Rotace partnera
+          // Rotace reklamního systému
           setCurrentAdSystem(current => {
             if (current === 'HILLTOP') return 'CLICKADILLA';
             if (current === 'CLICKADILLA') return 'ONCLICKA';
             return 'HILLTOP';
           });
-          // Vynucení restartu VideoStation bez vlivu na expedici
+          // Vynucení rebootu stanice
           setNodeKey(k => k + 1);
-          return 60;
+          return 50;
         }
         return prev - 1;
       });
@@ -249,7 +262,7 @@ export const GameView: React.FC = () => {
     return () => clearInterval(interval);
   }, [activeExpedition, phase]);
 
-  // Hlavní časovač expedice (3 minuty) - nesmí se restartovat!
+  // Hlavní časovač expedice (3 minuty)
   useEffect(() => {
     if (!activeExpedition || timeLeft <= 0 || phase === 'COMPLETED') return;
 
@@ -278,6 +291,7 @@ export const GameView: React.FC = () => {
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
+      {/* Sidebar */}
       <aside className="w-20 md:w-64 border-r border-white/5 bg-black/60 flex flex-col py-8 z-20 backdrop-blur-md">
         <div className="mb-14 flex flex-col items-center gap-3">
           <Database className="text-[#00f3ff] animate-pulse" size={28} />
@@ -301,22 +315,23 @@ export const GameView: React.FC = () => {
         </nav>
       </aside>
 
+      {/* Main Area */}
       <main className="flex-1 relative flex flex-col overflow-hidden">
         {activeExpedition ? (
           <div className="flex flex-col h-full animate-in fade-in duration-700 bg-[#050505]">
-            {/* HUD */}
+            {/* Header HUD */}
             <div className="px-12 py-6 border-b border-[#00f3ff]/20 bg-black flex justify-between items-center z-10 shadow-2xl">
               <div className="flex items-center gap-10">
                 <div className="space-y-1">
-                  <span className="text-[8px] text-[#00f3ff]/40 uppercase font-black block tracking-widest">UPLINK_PROTOCOL</span>
+                  <span className="text-[8px] text-[#00f3ff]/40 uppercase font-black block tracking-widest">EXP_UPLINK</span>
                   <span className="text-xl font-black text-white italic uppercase tracking-[0.2em]">0x{expeditionLevel.toString(16).toUpperCase()}</span>
                 </div>
                 <div className="h-8 w-px bg-white/10" />
                 <div className="flex flex-col">
-                   <span className="text-[8px] text-[#ff00ff]/40 uppercase font-black tracking-widest">STRICT_RELOAD_CYCLE</span>
+                   <span className="text-[8px] text-[#ff00ff]/40 uppercase font-black tracking-widest">STRICT_50S_REBOOT_TIMER</span>
                    <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-[#ff00ff] animate-ping" />
-                      <span className="text-xs font-bold text-white uppercase tracking-tighter">{currentAdSystem} (RESET: {cycleTimer}s)</span>
+                      <span className="text-xs font-bold text-white uppercase tracking-tighter">{currentAdSystem} (REBOOT IN: {cycleTimer}s)</span>
                    </div>
                 </div>
               </div>
@@ -335,22 +350,22 @@ export const GameView: React.FC = () => {
               </div>
             </div>
 
-            {/* EXPEDITION MAIN VIEW */}
+            {/* Expedition Main */}
             <div className="flex-1 flex overflow-hidden">
                <div className="flex-1 flex flex-col p-8 gap-8 overflow-hidden relative">
                   <div className="absolute inset-0 tactical-grid opacity-5 pointer-events-none" />
                   
-                  {/* VIDEO STATION (AFK Modul) */}
+                  {/* AFK MODUL - RESETUJE SE KAŽDÝCH 50s */}
                   <VideoStation system={currentAdSystem} nodeKey={nodeKey} onLog={addLog} />
 
                   <div className="w-full max-w-4xl mx-auto flex-1 border border-[#00f3ff]/20 bg-black/60 p-8 flex flex-col gap-8 overflow-hidden relative shadow-inner rounded-sm">
                      <div className="flex justify-between items-center border-b border-[#00f3ff]/10 pb-4">
                         <div className="flex items-center gap-4">
                            <Sword size={22} className={phase === 'COMBAT' ? 'text-red-600 animate-bounce' : 'text-[#00f3ff]/10'} />
-                           <span className="text-[11px] font-black uppercase tracking-[0.5em] text-[#00f3ff]">SYSTEM_INTEGRITY_v7.5</span>
+                           <span className="text-[11px] font-black uppercase tracking-[0.5em] text-[#00f3ff]">SYSTEM_INTEGRITY_v9.0</span>
                         </div>
                         <div className="flex gap-4 text-[#00f3ff]/40 text-[9px] font-black uppercase tracking-widest">
-                           UPLINK_DURATION: 180s | REFRESH_RATE: 60s
+                           TOTAL_DURATION: 180s | REBOOT_CYCLE: 50s
                         </div>
                      </div>
 
@@ -358,7 +373,7 @@ export const GameView: React.FC = () => {
                         {phase === 'COMBAT' && (
                            <div className="flex flex-col items-center gap-12 animate-in zoom-in duration-700 text-center">
                               <Sword size={140} className="text-red-600 animate-bounce drop-shadow-[0_0_30px_red]" />
-                              <p className="text-[14px] text-red-500 font-black uppercase tracking-[1.8em] animate-pulse">BYPASSING_PROTECTION</p>
+                              <p className="text-[14px] text-red-500 font-black uppercase tracking-[1.8em] animate-pulse">BYPASSING_FIREWALLS</p>
                            </div>
                         )}
                         {phase === 'HARVESTING' && (
@@ -367,27 +382,27 @@ export const GameView: React.FC = () => {
                               <div className="w-[450px] h-3 bg-white/5 rounded-full overflow-hidden border border-white/10 p-1 shadow-[0_0_15px_rgba(0,255,0,0.1)]">
                                  <div className="h-full bg-green-500 animate-loading-bar rounded-full" />
                               </div>
-                              <p className="text-[14px] text-green-500 font-black uppercase tracking-[1.8em] animate-pulse">MINING_FRAGMENTS</p>
+                              <p className="text-[14px] text-green-500 font-black uppercase tracking-[1.8em] animate-pulse">EXTRACTING_FRAGMENTS</p>
                            </div>
                         )}
                         {phase === 'STABILIZING' && (
                            <div className="flex flex-col items-center gap-12 animate-in fade-in duration-700 text-center">
                               <Wifi size={140} className="text-[#00f3ff] animate-pulse drop-shadow-[0_0_40px_#00f3ff]" />
-                              <p className="text-[14px] text-[#00f3ff] font-black uppercase tracking-[1.8em] animate-pulse">CLEANING_LOGS</p>
+                              <p className="text-[14px] text-[#00f3ff] font-black uppercase tracking-[1.8em] animate-pulse">CLEANING_LOG_FILES</p>
                            </div>
                         )}
                         {phase === 'COMPLETED' && (
                            <div className="absolute inset-0 bg-black/98 z-[200] flex flex-col items-center justify-center p-16 text-center border-4 border-[#00f3ff]/10">
                               <Trophy size={180} className="text-[#00f3ff] neon-glow-cyan animate-bounce mb-12" />
-                              <h2 className="text-8xl font-black italic uppercase tracking-tighter text-white mb-10 neon-glow-cyan">MIS_COMPLETED</h2>
-                              <button onClick={() => setActiveExpedition(false)} className="px-40 py-14 bg-[#00f3ff] text-black font-black uppercase tracking-[1.5em] hover:bg-white transition-all shadow-[0_0_60px_rgba(0,243,255,0.4)]">EXIT_UPLINK</button>
+                              <h2 className="text-8xl font-black italic uppercase tracking-tighter text-white mb-10 neon-glow-cyan">MISSION_SUCCESS</h2>
+                              <button onClick={() => setActiveExpedition(false)} className="px-40 py-14 bg-[#00f3ff] text-black font-black uppercase tracking-[1.5em] hover:bg-white transition-all shadow-[0_0_60px_rgba(0,243,255,0.4)]">TERMINATE_UPLINK</button>
                            </div>
                         )}
                      </div>
 
                      <div className="mt-auto space-y-6">
                         <div className="flex justify-between text-[12px] font-black uppercase tracking-[0.8em] text-[#00f3ff]/60">
-                           <span>MISSION_PROGRESS</span>
+                           <span>UPLINK_PROGRESS</span>
                            <span className="text-white shadow-white">{progressPercent}%</span>
                         </div>
                         <div className="h-4 w-full bg-white/5 relative rounded-full overflow-hidden border border-[#00f3ff]/20 p-1">
@@ -401,7 +416,7 @@ export const GameView: React.FC = () => {
                <div className="w-80 border-l border-white/5 bg-black/80 flex flex-col p-8 gap-6 z-10 backdrop-blur-3xl shadow-2xl">
                   <div className="flex items-center gap-3 border-b border-[#00f3ff]/30 pb-4">
                      <Activity size={20} className="text-[#00f3ff]" />
-                     <span className="text-[12px] font-black uppercase tracking-[0.5em] text-[#00f3ff]">SYSTEM_LOG_v7.5</span>
+                     <span className="text-[12px] font-black uppercase tracking-[0.5em] text-[#00f3ff]">SYSTEM_LOG_v9.0</span>
                   </div>
                   <div className="flex-1 overflow-y-auto space-y-7 custom-scrollbar pr-3">
                      {logs.map(log => (
@@ -468,8 +483,8 @@ export const GameView: React.FC = () => {
                   <div className="space-y-14 relative">
                     <h2 className="text-9xl font-black text-white uppercase italic tracking-[0.6em] leading-tight neon-glow-cyan">PRONIKNOUT</h2>
                     <p className="text-xl text-[#00f3ff]/60 max-w-4xl mx-auto leading-relaxed tracking-[0.5em] uppercase font-black">
-                      Vstup do Sektoru 0x{expeditionLevel.toString(16).toUpperCase()} vyžaduje video-autorizaci. <br/> 
-                      <span className="text-[#ff00ff] neon-glow-pink">AFK-MINING AKTIVNÍ (3 MINUTY)</span>.
+                      Vstup do sektoru 0x{expeditionLevel.toString(16).toUpperCase()} vyžaduje video-autorizaci. <br/> 
+                      <span className="text-[#ff00ff] neon-glow-pink">AFK-MINING AKTIVNÍ (50S CYKLUS)</span>.
                     </p>
                   </div>
                   <button 
@@ -478,7 +493,7 @@ export const GameView: React.FC = () => {
                   >
                     <div className="relative z-10 flex items-center gap-12">
                        <PlayCircle size={56} className="animate-pulse" />
-                       <span className="text-6xl font-black uppercase tracking-[1em]">ENTRY_LINK</span>
+                       <span className="text-6xl font-black uppercase tracking-[1em]">START_EXPEDITION</span>
                     </div>
                   </button>
                 </div>
