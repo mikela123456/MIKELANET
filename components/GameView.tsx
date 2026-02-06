@@ -4,6 +4,7 @@ import { AdBanner } from './AdBanner';
 
 type GameTab = 'profile' | 'expeditions' | 'items';
 type ExpeditionPhase = 'STARTING' | 'TRAVELING' | 'EXTRACTING' | 'COMPLETED' | 'FAILED';
+type AdSystem = 'HILLTOP' | 'MYADCASH';
 
 interface ExpeditionLog {
   id: string;
@@ -30,6 +31,7 @@ interface GameCoin {
 declare global {
   interface Window {
     fluidPlayer: any;
+    aclib: any;
   }
 }
 
@@ -68,6 +70,8 @@ export const GameView: React.FC = () => {
   const [activeCoinId, setActiveCoinId] = useState<string | null>(null);
   const [isVideoForStart, setIsVideoForStart] = useState(false);
   const [isAdPlaying, setIsAdPlaying] = useState(false);
+  const [currentAdSystem, setCurrentAdSystem] = useState<AdSystem>('HILLTOP');
+  
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerInstance = useRef<any>(null);
 
@@ -78,10 +82,26 @@ export const GameView: React.FC = () => {
   };
 
   const openVideoAd = (forStart: boolean = false) => {
+    // Toggling systems: Hilltop -> MyAdCash -> Hilltop...
+    const chosenSystem = currentAdSystem;
+    setCurrentAdSystem(chosenSystem === 'HILLTOP' ? 'MYADCASH' : 'HILLTOP');
+
     setIsVideoForStart(forStart);
     setVideoAdVisible(true);
     setVideoAdTimer(AD_WATCH_DURATION);
     setIsAdPlaying(false);
+    
+    // If MyAdCash, trigger it directly
+    if (chosenSystem === 'MYADCASH' && window.aclib) {
+      try {
+        window.aclib.runAutoTag({
+          zoneId: '1ixxi9j9at',
+        });
+        addLog("Iniciuji MyAdCash AutoTag uzel...", "info");
+      } catch (e) {
+        console.error("MyAdCash failed", e);
+      }
+    }
   };
 
   const claimVideoReward = () => {
@@ -102,9 +122,9 @@ export const GameView: React.FC = () => {
     }
   };
 
+  // Fluid Player Logic (only if system is HILLTOP)
   useEffect(() => {
-    if (videoAdVisible && videoRef.current && window.fluidPlayer) {
-      // Initialize Fluid Player for VAST
+    if (videoAdVisible && currentAdSystem === 'HILLTOP' && videoRef.current && window.fluidPlayer) {
       playerInstance.current = window.fluidPlayer(videoRef.current, {
         layoutControls: {
           fillToContainer: true,
@@ -127,25 +147,27 @@ export const GameView: React.FC = () => {
         }
       });
 
-      // Simple detection for playback to start the timer
       const checkPlayback = setInterval(() => {
         if (playerInstance.current && !isAdPlaying) {
           setIsAdPlaying(true);
-          addLog("Uplink Established. Verifying data packets...", "info");
+          addLog("Uplink Established. Verifying Hilltop data...", "info");
         }
       }, 1000);
 
       return () => {
         clearInterval(checkPlayback);
         if (playerInstance.current) {
-          // Cleanup
           try { playerInstance.current.destroy(); } catch(e) {}
           playerInstance.current = null;
         }
       };
+    } else if (videoAdVisible && currentAdSystem === 'MYADCASH') {
+      // MyAdCash system handles its own rendering, we just need to start the 60s timer
+      setIsAdPlaying(true);
     }
-  }, [videoAdVisible]);
+  }, [videoAdVisible, currentAdSystem]);
 
+  // Unified 60s gate and auto-close
   useEffect(() => {
     let timer: number;
     if (videoAdVisible && isAdPlaying && videoAdTimer > 0) {
@@ -153,7 +175,6 @@ export const GameView: React.FC = () => {
         setVideoAdTimer(prev => prev - 1);
       }, 1000);
     } else if (videoAdVisible && isAdPlaying && videoAdTimer === 0) {
-      // Automatic claim and close when timer reaches 0
       const autoCloseTimeout = setTimeout(() => {
         claimVideoReward();
       }, 2000);
@@ -184,6 +205,12 @@ export const GameView: React.FC = () => {
 
   const [expeditionEndTime, setExpeditionEndTime] = useState<number | null>(null);
   const [currentExpeditionDuration, setCurrentExpeditionDuration] = useState<number>(0);
+
+  const handleCoinClick = (id: string) => {
+    setActiveCoinId(id);
+    openVideoAd(false);
+    addLog("Iniciuji dekódování datového fragmentu...", "info");
+  };
 
   const handleAdDestroyed = (id: number) => {
     setActiveAds(prev => prev.filter(ad => ad.id !== id));
@@ -246,16 +273,18 @@ export const GameView: React.FC = () => {
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
-      {/* IMPROVED VIDEO AD VAST PLAYER MODAL */}
+      {/* VIDEO AD MODAL */}
       {videoAdVisible && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/98 backdrop-blur-3xl animate-in fade-in duration-500">
           <div className="w-full max-w-4xl bg-black border-2 border-[#00f3ff]/40 shadow-[0_0_150px_rgba(0,243,255,0.2)] relative overflow-hidden flex flex-col">
             
-            {/* Modal Header - Close button removed as requested */}
+            {/* Modal Header */}
             <div className="p-5 border-b border-[#00f3ff]/20 flex justify-between items-center bg-[#050505]">
                <div className="flex items-center gap-4">
                  <Signal className="text-red-600 animate-pulse" size={20} />
-                 <span className="text-sm font-black uppercase tracking-[0.25em]">{isVideoForStart ? 'PŘED-START_VAST_VERIFIKACE' : 'DATAVÝ_VAST_PŘENOS'}</span>
+                 <span className="text-sm font-black uppercase tracking-[0.25em]">
+                   {currentAdSystem === 'HILLTOP' ? 'UPLINK_VAST_HILLTOP' : 'UPLINK_AUTOTAG_MYADCASH'}
+                 </span>
                </div>
             </div>
 
@@ -263,14 +292,21 @@ export const GameView: React.FC = () => {
             <div className="aspect-video bg-[#010101] relative flex flex-col items-center justify-center overflow-hidden">
                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,243,255,0.05)_0%,transparent_70%)] pointer-events-none" />
 
-               {/* Fluid Player Instance */}
+               {/* Fluid Player (Hilltop) or Empty (MyAdCash script handles display) */}
                <div className="w-full h-full z-10">
-                  <video ref={videoRef} id="video-ad-player">
-                    <source src="" type="video/mp4" />
-                  </video>
+                  {currentAdSystem === 'HILLTOP' ? (
+                    <video ref={videoRef} id="video-ad-player">
+                      <source src="" type="video/mp4" />
+                    </video>
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center">
+                       <Database className="text-[#ff00ff] animate-pulse mb-4" size={48} />
+                       <span className="text-xs font-black uppercase tracking-[0.4em]">MyAdCash Protocol Active</span>
+                    </div>
+                  )}
                </div>
                
-               {/* Overlay Progress / Controls (When ad is playing) */}
+               {/* Overlay Progress / Controls */}
                <div className="absolute bottom-0 left-0 w-full p-10 bg-gradient-to-t from-black via-black/90 to-transparent flex flex-col items-center gap-6 z-30 pointer-events-none">
                   {videoAdTimer > 0 ? (
                     <div className="flex flex-col items-center gap-4 bg-black/80 px-12 py-6 border border-[#00f3ff]/20 backdrop-blur-md shadow-2xl pointer-events-auto">
@@ -281,19 +317,19 @@ export const GameView: React.FC = () => {
                             <Activity className="text-[#00f3ff] animate-pulse" size={20} />
                          )}
                          <div className="flex flex-col">
-                            <span className="text-[11px] font-black uppercase tracking-[0.3em] text-[#00f3ff]">{!isAdPlaying ? 'PŘÍPRAVA_VAST_PROTOKOLU' : 'DATOVÝ_TOK_AKTIVNÍ'}</span>
-                            <span className="text-[9px] text-white/40 uppercase tracking-widest font-bold">ZABEZPEČENÉ_SPOJENÍ: {videoAdTimer}S</span>
+                            <span className="text-[11px] font-black uppercase tracking-[0.3em] text-[#00f3ff]">DATOVÝ_TOK_AKTIVNÍ</span>
+                            <span className="text-[9px] text-white/40 uppercase tracking-widest font-bold">SYNCHRONIZACE: {videoAdTimer}S</span>
                          </div>
                        </div>
                        <div className="w-64 h-2 bg-white/5 relative rounded-full overflow-hidden border border-white/5">
-                          <div className="h-full bg-gradient-to-r from-[#00f3ff] to-[#ff00ff] transition-all duration-1000 linear" style={{ width: `${(1 - videoAdTimer/AD_WATCH_DURATION) * 100}%` }} />
+                          <div className="h-full bg-gradient-to-r from-[#00f3ff] to-[#ff00ff] transition-all duration-1000 linear shadow-[0_0_10px_#00f3ff]" style={{ width: `${(1 - videoAdTimer/AD_WATCH_DURATION) * 100}%` }} />
                        </div>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center gap-8 animate-in zoom-in slide-in-from-bottom-8 duration-700 pointer-events-auto">
                        <div className="flex items-center gap-3 bg-green-500/20 border-2 border-green-500/50 px-8 py-3 rounded-full shadow-[0_0_20px_rgba(34,197,94,0.3)]">
                           <Shield size={18} className="text-green-400" />
-                          <p className="text-xs font-black uppercase tracking-[0.25em] text-green-400">PŘENOS_VAST_DOKONČEN</p>
+                          <p className="text-xs font-black uppercase tracking-[0.25em] text-green-400">PŘENOS_DOKONČEN</p>
                        </div>
                        <div className="bg-black/40 px-6 py-2 border border-white/10 text-[9px] uppercase tracking-widest text-white/40">
                           Probíhá automatické zpracování...
@@ -304,7 +340,7 @@ export const GameView: React.FC = () => {
             </div>
 
             <div className="p-4 bg-[#050505] flex justify-between items-center border-t border-white/5 px-8">
-               <span className="text-[8px] opacity-20 uppercase tracking-[0.4em]">Protocol: HilltopAds_Fluid_VAST_v3 | 0xDEADBEEF</span>
+               <span className="text-[8px] opacity-20 uppercase tracking-[0.4em]">Protocol: {currentAdSystem === 'HILLTOP' ? 'HilltopAds_VAST' : 'MyAdCash_AutoTag'} | 0xDEADBEEF</span>
                <div className="flex gap-4">
                   <button onClick={() => window.open(VIDEO_AD_URL, '_blank')} className="text-[8px] uppercase tracking-widest text-[#00f3ff]/40 hover:text-white flex items-center gap-1">
                     <ExternalLink size={10} /> Manuální_Odkaz
@@ -513,7 +549,7 @@ export const GameView: React.FC = () => {
                     <h2 className="text-7xl font-black text-white uppercase italic tracking-[0.4em] leading-tight neon-glow-cyan">VSTOUPIT_DO_MATRIXU</h2>
                     <p className="text-base text-[#00f3ff]/60 max-w-2xl mx-auto leading-loose tracking-[0.3em] uppercase font-black">
                       Detekována hluboká vrstva Sektoru 0x{expeditionLevel.toString(16).toUpperCase()}. <br/> 
-                      Nutná autorizace přes uzel <span className="text-[#ff00ff] neon-glow-pink">HilltopAds</span>.
+                      Nutná autorizace přes uzel <span className="text-[#ff00ff] neon-glow-pink">MULTI_AD_SWITCH</span>.
                     </p>
                   </div>
                   <button 
