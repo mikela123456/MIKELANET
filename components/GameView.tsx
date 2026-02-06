@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { User, Zap, Compass, Truck, Timer, Trophy, Shield, Activity, Clock, Database, PlayCircle, Lock, Signal, Sword, Cpu, Wifi, RefreshCw, AlertTriangle, Play } from 'lucide-react';
+import { User, Zap, Compass, Truck, Timer, Trophy, Shield, Activity, Clock, Database, PlayCircle, Lock, Signal, Sword, Cpu, Wifi, RefreshCw, AlertTriangle, Play, LogOut } from 'lucide-react';
 
 // Add missing interfaces to fix TypeScript errors
 interface UpgradeItem {
@@ -55,7 +55,6 @@ const VideoStation: React.FC<{
   const playerRef = useRef<any>(null);
   const partner = AD_PARTNERS[partnerIndex];
 
-  // CRITICAL FIX: Fluid Player modifies DOM. We must destroy it before React unmounts or re-renders.
   useEffect(() => {
     let isMounted = true;
 
@@ -72,19 +71,16 @@ const VideoStation: React.FC<{
     };
 
     const init = async () => {
-      // 1. Vizualizace rebootu
       setIsTransitioning(true);
       setShowContent(false);
       setIsAdPlaying(false);
       
-      // Krátká prodleva pro vyčištění paměti a vizuální efekt
       await new Promise(r => setTimeout(r, 800));
       
       if (!isMounted || !videoRef.current || !window.fluidPlayer) return;
 
       try {
         setIsTransitioning(false);
-        // 2. Inicializace Fluid Playeru na čerstvém video elementu
         playerRef.current = window.fluidPlayer(videoRef.current, {
           layoutControls: {
             fillToContainer: true,
@@ -123,7 +119,6 @@ const VideoStation: React.FC<{
           }
         });
 
-        // Event listener pro detekci konce videa pro loopování obsahu (oceánu)
         if (videoRef.current) {
           videoRef.current.addEventListener('ended', () => {
             if (videoRef.current && !isAdPlaying) {
@@ -139,10 +134,8 @@ const VideoStation: React.FC<{
 
     const playContent = () => {
       if (videoRef.current) {
-        // Zkusíme MIKELANET
         videoRef.current.src = LOCAL_VIDEO_SRC;
         videoRef.current.play().catch(() => {
-          // Fallback na testovací video s oceánem
           if (videoRef.current) {
             videoRef.current.src = FALLBACK_VIDEO_SRC;
             videoRef.current.play().catch(e => console.error("Final playback error:", e));
@@ -157,11 +150,10 @@ const VideoStation: React.FC<{
       isMounted = false;
       cleanup();
     };
-  }, [rebootKey]); // CRITICAL: RebootKey triggers whole cycle
+  }, [rebootKey]);
 
   return (
     <div className="w-full max-w-4xl mx-auto flex flex-col border-2 border-[#00f3ff]/40 bg-black shadow-[0_0_150px_rgba(0,0,0,1)] relative z-50 rounded-sm overflow-hidden min-h-[300px]">
-      {/* Header Station Status */}
       <div className="bg-[#050505] p-3 flex justify-between items-center border-b border-[#00f3ff]/20">
         <div className="flex items-center gap-3">
           <div className={`w-2.5 h-2.5 rounded-full ${isAdPlaying ? 'bg-red-500 animate-pulse shadow-[0_0_12px_red]' : 'bg-[#00f3ff] shadow-[0_0_12px_#00f3ff]'}`} />
@@ -175,7 +167,6 @@ const VideoStation: React.FC<{
       </div>
       
       <div className="aspect-video bg-black flex items-center justify-center relative w-full h-full">
-        {/* Transition Overlay - Glitch Effect */}
         {isTransitioning && (
           <div className="absolute inset-0 z-[110] bg-[#020202] flex flex-col items-center justify-center gap-6">
              <RefreshCw className="text-[#00f3ff] animate-spin" size={72} />
@@ -186,10 +177,6 @@ const VideoStation: React.FC<{
           </div>
         )}
 
-        {/* 
-          IMPORTANT: key={rebootKey} on the container forces React to destroy and rebuild the whole video subtree. 
-          This prevents Fluid Player from clashing with previous DOM manipulations (wrappers/overlays).
-        */}
         <div 
           key={rebootKey} 
           className={`w-full h-full transition-opacity duration-500 ${isTransitioning ? 'opacity-0' : 'opacity-100'}`}
@@ -199,7 +186,6 @@ const VideoStation: React.FC<{
             className="video-js vjs-default-skin w-full h-full block" 
             playsInline
           >
-             {/* Initial source set to fallback just in case */}
              <source src={FALLBACK_VIDEO_SRC} type="video/mp4" />
           </video>
         </div>
@@ -229,10 +215,10 @@ export const GameView: React.FC = () => {
 
   const [activeExpedition, setActiveExpedition] = useState(false);
   const [phase, setPhase] = useState<ExpeditionPhase>('COMBAT');
-  const [timeLeft, setTimeLeft] = useState(180); 
+  const [elapsedTime, setElapsedTime] = useState(0); 
   const [logs, setLogs] = useState<ExpeditionLog[]>([]);
+  const [isTimerHovered, setIsTimerHovered] = useState(false);
   
-  // Rotační systém
   const [partnerIndex, setPartnerIndex] = useState(0);
   const [rebootKey, setRebootKey] = useState(0);
   const [cycleTimer, setCycleTimer] = useState(60); 
@@ -242,7 +228,7 @@ export const GameView: React.FC = () => {
   };
 
   const startExpedition = () => {
-    setTimeLeft(180);
+    setElapsedTime(0);
     setActiveExpedition(true);
     setPhase('COMBAT');
     setLogs([]);
@@ -250,19 +236,14 @@ export const GameView: React.FC = () => {
     setRebootKey(k => k + 1);
     setCycleTimer(60);
     addLog(`Uplink inicializován. Sektor 0x${expeditionLevel.toString(16).toUpperCase()}`, 'info');
-    addLog(`AFK-Mining modul spuštěn (60s Reboot Cyklus).`, 'warn');
+    addLog(`Expedice bez časového limitu zahájena.`, 'warn');
   };
 
-  const finishExpedition = () => {
-    const baseReward = 200 * expeditionLevel;
-    const bonusMultiplier = 1 + (upgrades.find(u => u.id === 'tm')!.level * 0.15);
-    const totalReward = Math.floor(baseReward * bonusMultiplier);
-    
-    setMikelaReserves(p => p + totalReward);
-    setReputation(p => p + expeditionLevel * 60);
-    setExpeditionLevel(p => p + 1);
-    setPhase('COMPLETED');
-    addLog(`Expedice dokončena. Data bezpečně uložena. +${totalReward} MK`, 'success');
+  const terminateExpedition = () => {
+    setActiveExpedition(false);
+    setIsTimerHovered(false);
+    setReputation(p => p + Math.floor(elapsedTime / 10) * 5); 
+    addLog(`Expedice ukončena. Trvání: ${Math.floor(elapsedTime / 60)}m ${elapsedTime % 60}s`, 'success');
   };
 
   // 60s rotační cyklus - Reboot přehrávače
@@ -272,9 +253,7 @@ export const GameView: React.FC = () => {
     const interval = setInterval(() => {
       setCycleTimer(prev => {
         if (prev <= 1) {
-          // Rotace partnerů (Hilltop -> Clickadilla -> Onclicka)
           setPartnerIndex(current => (current + 1) % AD_PARTNERS.length);
-          // Reboot přehrávače (změna rebootKey vynutí VideoStation re-mount)
           setRebootKey(k => k + 1);
           return 60;
         }
@@ -285,36 +264,37 @@ export const GameView: React.FC = () => {
     return () => clearInterval(interval);
   }, [activeExpedition, phase]);
 
-  // Časovač expedice
+  // Infinite Expedition Timer & Currency Generator
   useEffect(() => {
-    if (!activeExpedition || timeLeft <= 0 || phase === 'COMPLETED') return;
+    if (!activeExpedition || phase === 'COMPLETED') return;
 
     const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        const next = prev - 1;
-        const progress = ((180 - next) / 180) * 100;
+      setElapsedTime(prev => {
+        const next = prev + 1;
         
-        if (progress < 30) setPhase('COMBAT');
-        else if (progress < 80) setPhase('HARVESTING');
+        const cycleSeconds = next % 180;
+        if (cycleSeconds < 60) setPhase('COMBAT');
+        else if (cycleSeconds < 120) setPhase('HARVESTING');
         else setPhase('STABILIZING');
 
-        if (next <= 0) {
-          finishExpedition();
-          return 0;
+        if (next > 0 && next % 30 === 0) {
+          const bonusMultiplier = 1 + (upgrades.find(u => u.id === 'tm')!.level * 0.15);
+          const baseReward = 4;
+          const totalReward = Math.floor(baseReward * bonusMultiplier);
+          setMikelaReserves(p => p + totalReward);
+          addLog(`Generováno +${totalReward} MK (Interval 30s).`, 'success');
         }
+
         return next;
       });
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [activeExpedition, timeLeft, phase]);
-
-  const progressPercent = useMemo(() => Math.floor(((180 - timeLeft) / 180) * 100), [timeLeft]);
+  }, [activeExpedition, phase, upgrades]);
 
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
-      {/* Sidebar Navigation */}
       <aside className="w-20 md:w-64 border-r border-white/5 bg-black/60 flex flex-col py-8 z-20 backdrop-blur-md">
         <div className="mb-14 flex flex-col items-center gap-3">
           <Database className="text-[#00f3ff] animate-pulse" size={28} />
@@ -338,11 +318,9 @@ export const GameView: React.FC = () => {
         </nav>
       </aside>
 
-      {/* Main Game Area */}
       <main className="flex-1 relative flex flex-col overflow-hidden">
         {activeExpedition ? (
           <div className="flex flex-col h-full animate-in fade-in duration-700 bg-[#050505]">
-            {/* Expedition HUD */}
             <div className="px-12 py-6 border-b border-[#00f3ff]/20 bg-black flex justify-between items-center z-10 shadow-2xl">
               <div className="flex items-center gap-10">
                 <div className="space-y-1">
@@ -363,15 +341,37 @@ export const GameView: React.FC = () => {
 
               <div className="flex items-center gap-8">
                  <div className="text-right">
-                    <span className="text-[8px] text-white/30 uppercase font-black block mb-1">CURRENT_PHASE</span>
-                    <span className="text-sm font-black text-[#00f3ff] uppercase tracking-widest">{phase}</span>
+                    <span className="text-[8px] text-white/30 uppercase font-black block mb-1">MISSION_STATUS</span>
+                    <span className="text-sm font-black text-[#00f3ff] uppercase tracking-widest">ACTIVE: {phase}</span>
                  </div>
-                 <div className="flex items-center gap-4 bg-[#00f3ff]/10 border border-[#00f3ff]/30 px-8 py-3 rounded shadow-[0_0_20px_rgba(0,243,255,0.2)]">
-                    <Clock size={16} className="animate-pulse text-[#00f3ff]" />
-                    <span className="text-2xl font-mono font-black tabular-nums text-white">
-                      {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}
-                    </span>
-                 </div>
+                 {/* 
+                    HUD TIMER BUTTON 
+                    Změní se na UKONČIT při najetí myší (hover)
+                 */}
+                 <button 
+                    onClick={terminateExpedition}
+                    onMouseEnter={() => setIsTimerHovered(true)}
+                    onMouseLeave={() => setIsTimerHovered(false)}
+                    className={`flex items-center gap-4 border px-8 py-3 rounded shadow-lg transition-all duration-300 min-w-[140px] justify-center ${
+                        isTimerHovered 
+                        ? 'bg-[#ff00ff]/20 border-[#ff00ff] shadow-[0_0_20px_rgba(255,0,255,0.4)]' 
+                        : 'bg-[#00f3ff]/10 border-[#00f3ff]/30 shadow-[0_0_20px_rgba(0,243,255,0.2)]'
+                    }`}
+                 >
+                    {isTimerHovered ? (
+                        <>
+                            <LogOut size={18} className="text-[#ff00ff] animate-pulse" />
+                            <span className="text-xl font-black text-[#ff00ff] uppercase tracking-[0.2em]">UKONČIT</span>
+                        </>
+                    ) : (
+                        <>
+                            <Clock size={18} className="animate-pulse text-[#00f3ff]" />
+                            <span className="text-2xl font-mono font-black tabular-nums text-white">
+                                {Math.floor(elapsedTime / 60)}:{String(elapsedTime % 60).padStart(2, '0')}
+                            </span>
+                        </>
+                    )}
+                 </button>
               </div>
             </div>
 
@@ -379,17 +379,16 @@ export const GameView: React.FC = () => {
                <div className="flex-1 flex flex-col p-8 gap-8 overflow-hidden relative">
                   <div className="absolute inset-0 tactical-grid opacity-5 pointer-events-none" />
                   
-                  {/* AFK VIDEO COMPONENT WITH 60S REBOOT RE-MOUNTING */}
                   <VideoStation partnerIndex={partnerIndex} rebootKey={rebootKey} onLog={addLog} />
 
                   <div className="w-full max-w-4xl mx-auto flex-1 border border-[#00f3ff]/20 bg-black/60 p-8 flex flex-col gap-8 overflow-hidden relative shadow-inner rounded-sm">
                      <div className="flex justify-between items-center border-b border-[#00f3ff]/10 pb-4">
                         <div className="flex items-center gap-4">
                            <Sword size={22} className={phase === 'COMBAT' ? 'text-red-600 animate-bounce' : 'text-[#00f3ff]/10'} />
-                           <span className="text-[11px] font-black uppercase tracking-[0.5em] text-[#00f3ff]">UPLINK_SYSTEM_v12.1</span>
+                           <span className="text-[11px] font-black uppercase tracking-[0.5em] text-[#00f3ff]">UPLINK_SYSTEM_v12.2</span>
                         </div>
                         <div className="flex gap-4 text-[#00f3ff]/40 text-[9px] font-black uppercase tracking-widest">
-                           UPLINK_QUALITY: STABLE | PARTNER_{partnerIndex + 1}/3
+                           REWARD_TIMER: {30 - (elapsedTime % 30)}s | PARTNER_{partnerIndex + 1}/3
                         </div>
                      </div>
 
@@ -403,7 +402,7 @@ export const GameView: React.FC = () => {
                         {phase === 'HARVESTING' && (
                            <div className="flex flex-col items-center gap-12 animate-in slide-in-from-bottom-24 duration-700 text-center">
                               <Cpu size={120} className="text-green-500 animate-spin-slow drop-shadow-[0_0_30px_green]" />
-                              <div className="w-[450px] h-3 bg-white/5 rounded-full overflow-hidden border border-white/10 p-1 shadow-[0_0_15px_rgba(0,255,0,0.1)]">
+                              <div className="w-[450px] h-3 bg-white/5 rounded-full overflow-hidden border border-white/10 p-1 shadow-[0_0_150px_rgba(0,255,0,0.1)]">
                                  <div className="h-full bg-green-500 animate-loading-bar rounded-full" />
                               </div>
                               <p className="text-[14px] text-green-500 font-black uppercase tracking-[1.8em] animate-pulse">HARVESTING_MK_NODES</p>
@@ -415,28 +414,20 @@ export const GameView: React.FC = () => {
                               <p className="text-[14px] text-[#00f3ff] font-black uppercase tracking-[1.8em] animate-pulse">STABILIZING_UPLINK</p>
                            </div>
                         )}
-                        {phase === 'COMPLETED' && (
-                           <div className="absolute inset-0 bg-black/98 z-[200] flex flex-col items-center justify-center p-16 text-center border-4 border-[#00f3ff]/10">
-                              <Trophy size={180} className="text-[#00f3ff] neon-glow-cyan animate-bounce mb-12" />
-                              <h2 className="text-8xl font-black italic uppercase tracking-tighter text-white mb-10 neon-glow-cyan">UPLINK_COMPLETE</h2>
-                              <button onClick={() => setActiveExpedition(false)} className="px-40 py-14 bg-[#00f3ff] text-black font-black uppercase tracking-[1.5em] hover:bg-white transition-all shadow-[0_0_60px_rgba(0,243,255,0.4)]">EXIT_SYSTEM</button>
-                           </div>
-                        )}
                      </div>
 
                      <div className="mt-auto space-y-6">
                         <div className="flex justify-between text-[12px] font-black uppercase tracking-[0.8em] text-[#00f3ff]/60">
-                           <span>PROGRESS_STATUS</span>
-                           <span className="text-white shadow-white">{progressPercent}%</span>
+                           <span>MISSION_DURATION</span>
+                           <span className="text-white shadow-white">{Math.floor(elapsedTime / 3600)}h {Math.floor((elapsedTime % 3600) / 60)}m {elapsedTime % 60}s</span>
                         </div>
                         <div className="h-4 w-full bg-white/5 relative rounded-full overflow-hidden border border-[#00f3ff]/20 p-1">
-                           <div className="h-full bg-gradient-to-r from-red-600 via-[#00f3ff] to-green-600 shadow-[0_0_30px_rgba(0,243,255,0.8)] transition-all duration-1000 rounded-full" style={{ width: `${progressPercent}%` }} />
+                           <div className="h-full bg-gradient-to-r from-red-600 via-[#00f3ff] to-green-600 shadow-[0_0_30px_rgba(0,243,255,0.8)] transition-all duration-[2000ms] rounded-full" style={{ width: `${(elapsedTime % 30 / 30) * 100}%` }} />
                         </div>
                      </div>
                   </div>
                </div>
 
-               {/* Activity Log Sidebar */}
                <div className="w-80 border-l border-white/5 bg-black/80 flex flex-col p-8 gap-6 z-10 backdrop-blur-3xl shadow-2xl">
                   <div className="flex items-center gap-3 border-b border-[#00f3ff]/30 pb-4">
                      <Activity size={20} className="text-[#00f3ff]" />
