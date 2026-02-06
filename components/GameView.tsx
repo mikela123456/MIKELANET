@@ -83,14 +83,12 @@ export const GameView: React.FC = () => {
   };
 
   const openVideoAd = (forStart: boolean = false) => {
-    // Toggle system for the next play
-    const chosenSystem = currentAdSystem;
-    setCurrentAdSystem(chosenSystem === 'HILLTOP' ? 'IMA' : 'HILLTOP');
-
     setIsVideoForStart(forStart);
     setVideoAdVisible(true);
     setVideoAdTimer(AD_WATCH_DURATION);
     setIsAdPlaying(false);
+    // System switching logic
+    setCurrentAdSystem(prev => prev === 'HILLTOP' ? 'IMA' : 'HILLTOP');
   };
 
   const claimVideoReward = () => {
@@ -111,44 +109,54 @@ export const GameView: React.FC = () => {
     }
   };
 
-  // Unified Ad initialization effect
+  // Improved Ad initialization to prevent XML raw display
   useEffect(() => {
     if (!videoAdVisible || !videoRef.current) return;
 
     if (currentAdSystem === 'HILLTOP' && window.fluidPlayer) {
-      playerInstance.current = window.fluidPlayer(videoRef.current, {
-        layoutControls: {
-          fillToContainer: true,
-          autoPlay: true,
-          mute: true,
-          allowDownload: false,
-          playbackRateControl: false,
-          persistentSettings: { volume: false }
-        },
-        vastOptions: {
-          adList: [{ roll: 'preRoll', vastTag: HILLTOP_VAST_URL }],
-          adFinishedCallback: () => addLog("Hilltop Transmission Complete.", "success")
-        }
-      });
-      setIsAdPlaying(true);
-      addLog("Iniciuji HilltopAds VAST protokol...", "info");
+      try {
+        playerInstance.current = window.fluidPlayer(videoRef.current, {
+          layoutControls: {
+            fillToContainer: true,
+            autoPlay: true,
+            mute: true,
+            allowDownload: false,
+            playbackRateControl: false,
+            persistentSettings: { volume: false }
+          },
+          vastOptions: {
+            adList: [{ roll: 'preRoll', vastTag: HILLTOP_VAST_URL }],
+            adFinishedCallback: () => addLog("Hilltop Uplink Complete.", "success")
+          }
+        });
+        setIsAdPlaying(true);
+        addLog("Navazuji Hilltop VAST spojení...", "info");
+      } catch (e) {
+        console.error("FluidPlayer init error", e);
+        setIsAdPlaying(true); // Fallback to let timer run
+      }
     } 
     else if (currentAdSystem === 'IMA' && window.videojs) {
-      // Create Video.js player
-      playerInstance.current = window.videojs(videoRef.current, {
-        autoplay: true,
-        muted: true,
-        controls: false,
-        fluid: true
-      });
+      try {
+        // Initialize Video.js according to requested code
+        const player = window.videojs(videoRef.current, {
+          autoplay: true,
+          muted: true,
+          controls: false,
+          fluid: true
+        });
+        
+        player.ima({
+          adTagUrl: IMA_AD_TAG_URL,
+        });
 
-      // Initialize IMA
-      playerInstance.current.ima({
-        adTagUrl: IMA_AD_TAG_URL,
-      });
-
-      setIsAdPlaying(true);
-      addLog("Iniciuji Video.js IMA uzel...", "info");
+        playerInstance.current = player;
+        setIsAdPlaying(true);
+        addLog("Navazuji IMA uzel YourAdExchange...", "info");
+      } catch (e) {
+        console.error("IMA init error", e);
+        setIsAdPlaying(true); // Fallback to let timer run
+      }
     }
 
     return () => {
@@ -165,7 +173,7 @@ export const GameView: React.FC = () => {
     };
   }, [videoAdVisible, currentAdSystem]);
 
-  // Timer logic
+  // Timer logic for 60s gate
   useEffect(() => {
     let timer: number;
     if (videoAdVisible && isAdPlaying && videoAdTimer > 0) {
@@ -271,22 +279,20 @@ export const GameView: React.FC = () => {
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
-      {/* VIDEO AD MODAL */}
+      {/* IMPROVED VIDEO AD MODAL - NO CLOSE BUTTON, AUTO CLOSURE */}
       {videoAdVisible && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/98 backdrop-blur-3xl animate-in fade-in duration-500">
           <div className="w-full max-w-4xl bg-black border-2 border-[#00f3ff]/40 shadow-[0_0_150px_rgba(0,243,255,0.2)] relative overflow-hidden flex flex-col">
             
-            {/* Modal Header */}
             <div className="p-5 border-b border-[#00f3ff]/20 flex justify-between items-center bg-[#050505]">
                <div className="flex items-center gap-4">
                  <Signal className="text-red-600 animate-pulse" size={20} />
                  <span className="text-sm font-black uppercase tracking-[0.25em]">
-                   {currentAdSystem === 'HILLTOP' ? 'UPLINK_VAST_HILLTOP' : 'UPLINK_VIDEOJS_IMA'}
+                   {currentAdSystem === 'HILLTOP' ? 'SECURE_UPLINK_HILLTOP' : 'SECURE_UPLINK_IMA'}
                  </span>
                </div>
             </div>
 
-            {/* Video Player Container */}
             <div className="aspect-video bg-[#010101] relative flex flex-col items-center justify-center overflow-hidden">
                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,243,255,0.05)_0%,transparent_70%)] pointer-events-none" />
 
@@ -296,7 +302,6 @@ export const GameView: React.FC = () => {
                   </video>
                </div>
                
-               {/* Overlay Progress / Controls */}
                <div className="absolute bottom-0 left-0 w-full p-10 bg-gradient-to-t from-black via-black/90 to-transparent flex flex-col items-center gap-6 z-30 pointer-events-none">
                   {videoAdTimer > 0 ? (
                     <div className="flex flex-col items-center gap-4 bg-black/80 px-12 py-6 border border-[#00f3ff]/20 backdrop-blur-md shadow-2xl pointer-events-auto">
@@ -330,9 +335,13 @@ export const GameView: React.FC = () => {
             </div>
 
             <div className="p-4 bg-[#050505] flex justify-between items-center border-t border-white/5 px-8">
-               <span className="text-[8px] opacity-20 uppercase tracking-[0.4em]">Protocol: {currentAdSystem === 'HILLTOP' ? 'HilltopAds_VAST' : 'VideoJS_IMA'} | 0xDEADBEEF</span>
+               <span className="text-[8px] opacity-20 uppercase tracking-[0.4em]">Protocol: {currentAdSystem === 'HILLTOP' ? 'HilltopAds_VAST_v3' : 'YourAdEx_VideoJS_IMA'} | 0xDEADBEEF</span>
                <div className="flex gap-4">
-                  <button onClick={() => window.open(HILLTOP_VAST_URL, '_blank')} className="text-[8px] uppercase tracking-widest text-[#00f3ff]/40 hover:text-white flex items-center gap-1">
+                  {/* Fixed Manual link - pointing to homepage to avoid raw XML display error */}
+                  <button 
+                    onClick={() => window.open(currentAdSystem === 'HILLTOP' ? 'https://hilltopads.com' : 'https://google.com', '_blank')} 
+                    className="text-[8px] uppercase tracking-widest text-[#00f3ff]/40 hover:text-white flex items-center gap-1"
+                  >
                     <ExternalLink size={10} /> Manuální_Odkaz
                   </button>
                </div>
@@ -539,7 +548,7 @@ export const GameView: React.FC = () => {
                     <h2 className="text-7xl font-black text-white uppercase italic tracking-[0.4em] leading-tight neon-glow-cyan">VSTOUPIT_DO_MATRIXU</h2>
                     <p className="text-base text-[#00f3ff]/60 max-w-2xl mx-auto leading-loose tracking-[0.3em] uppercase font-black">
                       Detekována hluboká vrstva Sektoru 0x{expeditionLevel.toString(16).toUpperCase()}. <br/> 
-                      Nutná autorizace přes uzel <span className="text-[#ff00ff] neon-glow-pink">MULTI_AD_SWITCH</span>.
+                      Nutná autorizace přes uzel <span className="text-[#ff00ff] neon-glow-pink">MULTI_AD_GATE</span>.
                     </p>
                   </div>
                   <button 
