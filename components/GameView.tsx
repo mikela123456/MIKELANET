@@ -4,7 +4,7 @@ import { AdBanner } from './AdBanner';
 
 type GameTab = 'profile' | 'expeditions' | 'items';
 type ExpeditionPhase = 'STARTING' | 'TRAVELING' | 'EXTRACTING' | 'COMPLETED' | 'FAILED';
-type AdSystem = 'HILLTOP' | 'CLICKADILLA';
+type AdSystem = 'HILLTOP' | 'CLICKADILLA' | 'ONCLICKA';
 
 interface ExpeditionLog {
   id: string;
@@ -39,6 +39,7 @@ declare global {
 // Ad Configs
 const HILLTOP_VAST_URL = "https://groundedmine.com/d.mTFSzgdpGDNYvcZcGXUK/FeJm/9IuZZNUElDktPwTaYW3CNUz/YTwMNFD/ket-N/j_c/3qN/jPA/1cMuwy";
 const CLICKADILLA_VAST_URL = "https://vast.yomeno.xyz/vast?spot_id=1480488";
+const ONCLICKA_VAST_URL = "https://bid.onclckstr.com/vast?spot_id=6109953";
 const AD_WATCH_DURATION = 60; 
 
 export const GameView: React.FC = () => {
@@ -90,9 +91,10 @@ export const GameView: React.FC = () => {
     setVideoAdTimer(AD_WATCH_DURATION);
     setIsAdPlaying(false);
     
-    // Cycle through systems: HILLTOP -> CLICKADILLA -> HILLTOP
+    // Cycle through systems: HILLTOP -> CLICKADILLA -> ONCLICKA -> HILLTOP
     setCurrentAdSystem(prev => {
       if (prev === 'HILLTOP') return 'CLICKADILLA';
+      if (prev === 'CLICKADILLA') return 'ONCLICKA';
       return 'HILLTOP';
     });
   };
@@ -135,9 +137,12 @@ export const GameView: React.FC = () => {
       addLog("Signál nestabilní, přecházím na autonomní odpočet...", "warn");
     }, 8000);
 
-    // Fluid Player for HilltopAds and Clickadilla (VAST 3.0/4.0 compatible)
-    if ((currentAdSystem === 'HILLTOP' || currentAdSystem === 'CLICKADILLA') && window.fluidPlayer && videoRef.current) {
-      const vastUrl = currentAdSystem === 'HILLTOP' ? HILLTOP_VAST_URL : CLICKADILLA_VAST_URL;
+    // Fluid Player initialization
+    if (window.fluidPlayer && videoRef.current) {
+      let vastUrl = HILLTOP_VAST_URL;
+      if (currentAdSystem === 'CLICKADILLA') vastUrl = CLICKADILLA_VAST_URL;
+      if (currentAdSystem === 'ONCLICKA') vastUrl = ONCLICKA_VAST_URL;
+
       try {
         playerInstance.current = window.fluidPlayer(videoRef.current, {
           layoutControls: {
@@ -347,7 +352,14 @@ export const GameView: React.FC = () => {
             <div className="p-3 bg-[#020202] flex justify-between items-center border-t border-white/5 px-8">
                <span className="text-[7px] opacity-10 uppercase tracking-[0.3em]">SECURE_LINK_ENCRYPTED_v2</span>
                <button 
-                  onClick={() => window.open(currentAdSystem === 'HILLTOP' ? 'https://hilltopads.com' : 'https://clickadilla.com', '_blank')} 
+                  onClick={() => {
+                    const urls: Record<AdSystem, string> = {
+                      HILLTOP: 'https://hilltopads.com',
+                      CLICKADILLA: 'https://clickadilla.com',
+                      ONCLICKA: 'https://onclicka.com'
+                    };
+                    window.open(urls[currentAdSystem], '_blank');
+                  }} 
                   className="text-[7px] uppercase tracking-widest text-[#00f3ff]/30 hover:text-white flex items-center gap-1"
                 >
                   <ExternalLink size={8} /> INFO_NODE
@@ -597,7 +609,7 @@ export const GameView: React.FC = () => {
                             }
                           }}
                           disabled={!canAfford}
-                          className={`w-full py-10 border-3 font-black text-base uppercase tracking-[0.5em] transition-all mt-auto flex items-center justify-center gap-6 shadow-2xl ${canAfford ? 'border-[#ff00ff] text-[#ff00ff] hover:bg-[#ff00ff] hover:text-black shadow-[0_0_30px_rgba(255,0,255,0.2)] hover:shadow-[0_0_60px_rgba(255,0,255,0.5)]' : 'border-white/10 text-white/10'}`}
+                          className={`w-full py-10 border-3 font-black text-base uppercase tracking-[0.5em] transition-all mt-auto flex items-center justify-center gap-6 shadow-2xl ${canAfford ? 'border-[#ff00ff] text-[#ff00ff] hover:bg-[#ff00ff] hover:text-black shadow-[0_0_30px_rgba(255,0,255,0.2)] hover:shadow-[0_0_60px_rgba(255,255,255,0.5)]' : 'border-white/10 text-white/10'}`}
                         >
                           {canAfford ? (
                             <>AKTUALIZOVAT_KÓD | {cost.toLocaleString()} MK</>
