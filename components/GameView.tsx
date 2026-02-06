@@ -1,15 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Compass, Package, Zap, Timer, Trophy, Clock, Coins, X, Terminal, Database, PlayCircle, Lock, Eye, Signal, Loader2, Truck, RefreshCw, AlertTriangle } from 'lucide-react';
+import { User, Compass, Package, Zap, Timer, Trophy, Clock, Coins, X, Database, Truck, RefreshCw, AlertTriangle, Signal } from 'lucide-react';
 import { AdBanner } from './AdBanner';
 
 type GameTab = 'profile' | 'expeditions' | 'items';
 type ExpeditionPhase = 'STARTING' | 'TRAVELING' | 'EXTRACTING' | 'COMPLETED' | 'FAILED';
-
-interface ExpeditionLog {
-  id: string;
-  text: string;
-  type: 'info' | 'warn' | 'success' | 'error';
-}
 
 interface UpgradeItem {
   id: string;
@@ -34,7 +28,7 @@ declare global {
 }
 
 const VIDEO_AD_URL = "https://groundedmine.com/dpmzFbz/d.GANRvbZjGiUS/ieemF9tu/ZOUCl_k/PVTpYG3_NWzeYNwEN/DQkwtsNFjccn3wN/jdA/1OMDwf";
-const AD_WATCH_DURATION = 60; // Nastaveno na 60 sekund dle požadavku
+const AD_WATCH_DURATION = 60; 
 
 export const GameView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<GameTab>('profile');
@@ -50,7 +44,6 @@ export const GameView: React.FC = () => {
 
   const [activeExpedition, setActiveExpedition] = useState<boolean>(false);
   const [phase, setPhase] = useState<ExpeditionPhase>('STARTING');
-  const [logs, setLogs] = useState<ExpeditionLog[]>([]);
   const [progress, setProgress] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
   const [coins, setCoins] = useState<GameCoin[]>([]);
@@ -63,12 +56,8 @@ export const GameView: React.FC = () => {
   const [activeCoinId, setActiveCoinId] = useState<string | null>(null);
   const [isVideoForStart, setIsVideoForStart] = useState(false);
   
-  const playerRef = useRef<any>(null);
-  const videoElementRef = useRef<HTMLVideoElement>(null);
-
-  const addLog = (text: string, type: 'info' | 'warn' | 'success' | 'error' = 'info') => {
-    setLogs(prev => [{ id: Math.random().toString(), text, type }, ...prev].slice(0, 12));
-  };
+  const playerInstance = useRef<any>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const openVideoAd = (forStart: boolean = false) => {
     setIsVideoForStart(forStart);
@@ -76,51 +65,41 @@ export const GameView: React.FC = () => {
     setVideoAdTimer(AD_WATCH_DURATION);
   };
 
-  // Fluid Player Logic - Čistá inicializace hned po otevření
+  // BST / VPAID Video Player Configuration
   useEffect(() => {
-    if (videoAdVisible && videoElementRef.current && window.fluidPlayer) {
-      // Malé zpoždění pro zajištění renderování DOM
-      const timer = setTimeout(() => {
-        if (!videoElementRef.current) return;
+    if (videoAdVisible && videoRef.current && window.fluidPlayer) {
+      const initPlayer = () => {
+        if (!videoRef.current) return;
         
-        try {
-          playerRef.current = window.fluidPlayer(videoElementRef.current, {
-            layoutControls: {
-              fillToContainer: true,
-              autoPlay: true,
-              mute: true,
-              allowDownload: false,
-              playbackRateControl: false,
-              persistentSettings: { volume: false },
-              adProgressbarColor: '#00f3ff',
-              primaryColor: '#00f3ff',
-              controlBar: {
-                autoHide: true,
-                animated: true
-              }
-            },
-            vastOptions: {
-              allowVPAID: true,
-              adList: [
-                {
-                  roll: 'preRoll',
-                  vastTag: VIDEO_AD_URL
-                }
-              ]
-            }
-          });
-        } catch (e) {
-          console.error("Fluid Player Error:", e);
-        }
-      }, 100);
+        // Ensure fresh initialization on every modal open
+        playerInstance.current = window.fluidPlayer(videoRef.current, {
+          layoutControls: {
+            fillToContainer: true,
+            autoPlay: true,
+            mute: true,
+            allowDownload: false,
+            playbackRateControl: false,
+            persistentSettings: { volume: false },
+            adProgressbarColor: '#00f3ff',
+            primaryColor: '#ff00ff',
+            controlBar: { autoHide: true, animated: true }
+          },
+          vastOptions: {
+            allowVPAID: true,
+            vpaidMode: 'insecure', // Critical for HilltopAds / BST VPAID scripts
+            adList: [{ roll: 'preRoll', vastTag: VIDEO_AD_URL }],
+            adStartedCallback: () => console.log('BST_AD_STARTED'),
+            adErrorCallback: (err: any) => console.error('BST_AD_ERROR', err)
+          }
+        });
+      };
 
+      const timer = setTimeout(initPlayer, 200);
       return () => {
         clearTimeout(timer);
-        if (playerRef.current) {
-          try {
-            playerRef.current.destroy();
-          } catch (e) {}
-          playerRef.current = null;
+        if (playerInstance.current) {
+          playerInstance.current.destroy();
+          playerInstance.current = null;
         }
       };
     }
@@ -145,7 +124,6 @@ export const GameView: React.FC = () => {
       if (coin) {
         setMikelaReserves(prev => prev + coin.value);
         setCoins(prev => prev.filter(c => c.id !== activeCoinId));
-        addLog(`Získáno ${coin.value} MK z datového fragmentu.`, 'success');
       }
       setVideoAdVisible(false);
       setActiveCoinId(null);
@@ -169,13 +147,11 @@ export const GameView: React.FC = () => {
     setCurrentExpeditionDuration(effectiveDuration);
     setActiveExpedition(true);
     setPhase('STARTING');
-    setLogs([]);
     setProgress(0);
     setAdsDestroyed(0);
     setTimeLeft(effectiveDuration);
     setCoins([]);
     setActiveAds([{ id: Date.now() }]);
-    addLog(`Navázáno spojení se Sektorem 0x${expeditionLevel.toString(16).toUpperCase()}`, 'info');
   };
 
   const [expeditionEndTime, setExpeditionEndTime] = useState<number | null>(null);
@@ -184,7 +160,6 @@ export const GameView: React.FC = () => {
   const handleAdDestroyed = (id: number) => {
     setActiveAds(prev => prev.filter(ad => ad.id !== id));
     setAdsDestroyed(prev => prev + 1);
-    addLog(`Anomálie eliminována`, 'success');
     setTimeout(() => {
       if (activeExpedition && timeLeft > 4) setActiveAds(prev => [...prev, { id: Date.now() }]);
     }, 2500);
@@ -226,45 +201,32 @@ export const GameView: React.FC = () => {
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
-      {/* VIDEO AD MODAL - EXACT REPRODUCTION FROM SCREENSHOT */}
+      {/* BST VIDEO MODAL - FINAL CONFIGURATION */}
       {videoAdVisible && (
-        <div className="fixed inset-0 z-[1000] flex flex-col bg-black">
+        <div className="fixed inset-0 z-[1000] flex flex-col bg-black animate-in fade-in duration-300">
           
-          {/* HEADER BAR */}
-          <header className="w-full h-16 bg-black border-b border-white/5 flex items-center justify-between px-6 shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1 opacity-60">
-                <div className="w-[1px] h-3 bg-[#00f3ff]" />
-                <div className="w-[1px] h-2 bg-[#00f3ff]" />
-                <div className="w-[1px] h-4 bg-[#00f3ff]" />
-              </div>
+          {/* HEADER (According to Screenshot) */}
+          <div className="w-full h-16 bg-black flex items-center justify-between px-8 shrink-0 border-b border-white/5">
+            <div className="flex items-center gap-4">
+              <div className="w-2 h-2 rounded-full bg-[#ff00ff] shadow-[0_0_10px_#ff00ff] animate-pulse" />
               <span className="text-[10px] text-[#00f3ff] font-bold tracking-[0.25em] uppercase">
-                NODE_UPLINK_A77 <span className="mx-2 opacity-30">|</span> AUTORIZACE VSTUPU DO SEKTORU
+                UPLINK_ACTIVE // AUTORIZACE STARTU
               </span>
             </div>
             
             <div className="flex flex-col items-end">
-               <span className="text-[9px] text-white/30 uppercase tracking-[0.2em] mb-1">VERIFIKACE OKNA</span>
-               <span className={`text-2xl font-black tabular-nums transition-colors ${videoAdTimer > 0 ? 'text-[#00f3ff]' : 'text-green-500'}`}>
+               <span className="text-[8px] text-white/30 uppercase tracking-[0.2em] mb-1">Verifikace spojení</span>
+               <span className="text-2xl font-black text-[#00f3ff] tabular-nums neon-glow-cyan leading-none">
                  {videoAdTimer}s
                </span>
             </div>
-          </header>
+          </div>
 
-          {/* MAIN PLAYER AREA */}
-          <main className="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
-             {/* Loader visible until ad starts */}
-             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
-               <div className="w-12 h-12 border-2 border-t-[#00f3ff] border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin mb-4" />
-               <span className="text-[10px] text-[#00f3ff] font-black tracking-[0.3em] uppercase opacity-40">
-                 NAVÁZUJI SPOJENÍ S HILLTOPADS...
-               </span>
-             </div>
-
-             <div className="w-full h-full relative z-20">
+          {/* PLAYER (Pure for VPAID compatibility) */}
+          <div className="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
+             <div className="w-full h-full relative z-10">
                 <video 
-                  ref={videoElementRef}
-                  id="fluid-ad-player-element"
+                  ref={videoRef}
                   className="w-full h-full object-contain"
                   autoPlay
                   muted
@@ -273,36 +235,31 @@ export const GameView: React.FC = () => {
                   <source src="" type="video/mp4" />
                 </video>
              </div>
-          </main>
+             
+             {/* Fallback loader */}
+             <div className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none">
+                <Database className="animate-pulse text-[#00f3ff]" size={100} />
+             </div>
+          </div>
 
-          {/* FOOTER BAR */}
-          <footer className="w-full h-16 bg-black border-t border-white/5 flex items-center justify-center shrink-0">
-            {videoAdTimer > 0 ? (
-               <div className="flex items-center gap-3 opacity-40">
-                  <div className="w-1 h-1 bg-[#00f3ff] rounded-full animate-pulse" />
-                  <span className="text-[10px] text-white uppercase tracking-[0.4em] font-bold">
-                    SLEDUJTE PŘENOS PRO AUTORIZACI ODMĚNY...
-                  </span>
-               </div>
-            ) : (
-              <button 
-                onClick={claimVideoReward}
-                className="group relative px-20 py-3 bg-[#00f3ff] text-black font-black uppercase tracking-[0.5em] text-sm hover:bg-white transition-all shadow-[0_0_30px_#00f3ff80]"
-              >
-                POTVRDIT PŘÍJEM
-              </button>
-            )}
-            
-            {/* Close button only after timer */}
-            {videoAdTimer <= 0 && (
-              <button 
-                onClick={() => setVideoAdVisible(false)}
-                className="absolute right-6 w-10 h-10 flex items-center justify-center bg-white/10 hover:bg-red-500 text-white transition-colors"
-              >
-                <X size={20} />
-              </button>
-            )}
-          </footer>
+          {/* FOOTER (According to Screenshot) */}
+          <div className="w-full h-16 bg-black flex items-center justify-center shrink-0 border-t border-white/5">
+             {videoAdTimer > 0 ? (
+                <span className="text-[10px] text-white/50 uppercase tracking-[0.4em] font-bold animate-pulse">
+                  SLEDUJTE REKLAMU PRO ZÍSKÁNÍ ODMĚNY...
+                </span>
+             ) : (
+                <div className="flex items-center gap-6">
+                  <button 
+                    onClick={claimVideoReward}
+                    className="px-16 py-3 bg-[#00f3ff] text-black font-black uppercase tracking-[0.5em] text-xs hover:bg-white transition-all shadow-[0_0_30px_#00f3ff60]"
+                  >
+                    POTVRDIT PŘÍJEM
+                  </button>
+                  <button onClick={() => setVideoAdVisible(false)} className="text-white/20 hover:text-white"><X size={20}/></button>
+                </div>
+             )}
+          </div>
         </div>
       )}
 
@@ -477,7 +434,7 @@ export const GameView: React.FC = () => {
         @keyframes grid-scroll { from { background-position: 0 0; } to { background-position: 80px 80px; } }
         .neon-glow-cyan { text-shadow: 0 0 10px #00f3ff; }
         
-        /* Fluid Player Overrides */
+        /* BST Player Overrides */
         .fluid_video_wrapper {
           width: 100% !important;
           height: 100% !important;
@@ -485,6 +442,7 @@ export const GameView: React.FC = () => {
           top: 0 !important;
           left: 0 !important;
           z-index: 20 !important;
+          background: #000 !important;
         }
       `}</style>
     </div>
