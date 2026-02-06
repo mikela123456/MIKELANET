@@ -116,11 +116,19 @@ export const GameView: React.FC = () => {
     }
   };
 
-  // Improved Ad initialization for Hilltop, IMA and Clickadilla
+  // Improved Ad initialization for all systems
   useEffect(() => {
     if (!videoAdVisible || !videoRef.current) return;
 
-    if (currentAdSystem === 'HILLTOP' && window.fluidPlayer) {
+    // Fallback timer: if ad doesn't start in 5s, start the 60s countdown anyway
+    const fallbackTimer = setTimeout(() => {
+      setIsAdPlaying(true);
+      addLog("Signál nestabilní, přecházím na autonomní odpočet...", "warn");
+    }, 6000);
+
+    // Fluid Player for HilltopAds and Clickadilla (VAST 3.0/4.0 compatible)
+    if ((currentAdSystem === 'HILLTOP' || currentAdSystem === 'CLICKADILLA') && window.fluidPlayer) {
+      const vastUrl = currentAdSystem === 'HILLTOP' ? HILLTOP_VAST_URL : CLICKADILLA_VAST_URL;
       try {
         playerInstance.current = window.fluidPlayer(videoRef.current, {
           layoutControls: {
@@ -132,23 +140,27 @@ export const GameView: React.FC = () => {
             persistentSettings: { volume: false }
           },
           vastOptions: {
-            adList: [{ roll: 'preRoll', vastTag: HILLTOP_VAST_URL }],
+            adList: [{ roll: 'preRoll', vastTag: vastUrl }],
             adFinishedCallback: () => {
-              addLog("Hilltop ad finished.", "success");
+              addLog(`${currentAdSystem} přenos dokončen.`, "success");
+            },
+            adErrorCallback: (err: any) => {
+              console.warn("VAST Error:", err);
+              addLog(`${currentAdSystem} VAST uzel nedostupný.`, "error");
+              setIsAdPlaying(true); // Ensure timer starts even on error
             }
           }
         });
         setIsAdPlaying(true);
-        addLog("Inicializace HilltopAds VAST...", "info");
+        addLog(`Inicializace ${currentAdSystem} VAST protokolu...`, "info");
       } catch (e) {
         console.error("FluidPlayer error:", e);
         setIsAdPlaying(true);
       }
     } 
-    else if ((currentAdSystem === 'IMA' || currentAdSystem === 'CLICKADILLA') && window.videojs) {
+    // Video.js IMA for YourAdExchange
+    else if (currentAdSystem === 'IMA' && window.videojs) {
       try {
-        const adTag = currentAdSystem === 'IMA' ? IMA_AD_TAG_URL : CLICKADILLA_VAST_URL;
-        
         const player = window.videojs(videoRef.current, {
           autoplay: true,
           muted: false, 
@@ -161,7 +173,7 @@ export const GameView: React.FC = () => {
         });
 
         player.ima({
-          adTagUrl: adTag,
+          adTagUrl: IMA_AD_TAG_URL,
           showControlsForAds: false,
           debug: false
         });
@@ -175,25 +187,27 @@ export const GameView: React.FC = () => {
 
         player.on('adserror', (e: any) => {
           console.warn("IMA Ads Error:", e);
-          addLog(`${currentAdSystem} Uplink unstable, waiting for timeout...`, "warn");
+          addLog("IMA Uplink error, čekám na časový limit...", "warn");
+          setIsAdPlaying(true);
         });
 
         playerInstance.current = player;
         setIsAdPlaying(true);
-        addLog(`Inicializace ${currentAdSystem} protokolu...`, "info");
+        addLog("Inicializace YourAdExchange IMA kanálu...", "info");
       } catch (e) {
-        console.error("IMA/Clickadilla setup error:", e);
+        console.error("IMA setup error:", e);
         setIsAdPlaying(true);
       }
     }
 
     return () => {
+      clearTimeout(fallbackTimer);
       if (playerInstance.current) {
         try {
-          if (currentAdSystem === 'HILLTOP') {
-            playerInstance.current.destroy();
-          } else {
+          if (currentAdSystem === 'IMA') {
             playerInstance.current.dispose();
+          } else {
+            playerInstance.current.destroy();
           }
         } catch(e) {}
         playerInstance.current = null;
@@ -326,7 +340,7 @@ export const GameView: React.FC = () => {
 
                <div className="w-full h-full z-10 flex items-center justify-center">
                   <video ref={videoRef} id="my-video" className="video-js vjs-default-skin w-full h-full" playsInline>
-                    <source src="" type="video/mp4" />
+                    <source src="https://vjs.zencdn.net/v/oceans.mp4" type="video/mp4" />
                   </video>
                </div>
                
