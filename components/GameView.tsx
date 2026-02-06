@@ -32,6 +32,7 @@ declare global {
   interface Window {
     fluidPlayer: any;
     videojs: any;
+    google: any;
   }
 }
 
@@ -87,7 +88,7 @@ export const GameView: React.FC = () => {
     setVideoAdVisible(true);
     setVideoAdTimer(AD_WATCH_DURATION);
     setIsAdPlaying(false);
-    // System switching logic
+    // Alternate between Hilltop and IMA system
     setCurrentAdSystem(prev => prev === 'HILLTOP' ? 'IMA' : 'HILLTOP');
   };
 
@@ -109,7 +110,7 @@ export const GameView: React.FC = () => {
     }
   };
 
-  // Improved Ad initialization to prevent XML raw display
+  // Improved Ad initialization for both Hilltop and IMA
   useEffect(() => {
     if (!videoAdVisible || !videoRef.current) return;
 
@@ -126,36 +127,57 @@ export const GameView: React.FC = () => {
           },
           vastOptions: {
             adList: [{ roll: 'preRoll', vastTag: HILLTOP_VAST_URL }],
-            adFinishedCallback: () => addLog("Hilltop Uplink Complete.", "success")
+            adFinishedCallback: () => {
+              addLog("Hilltop ad finished.", "success");
+            }
           }
         });
         setIsAdPlaying(true);
-        addLog("Navazuji Hilltop VAST spojení...", "info");
+        addLog("Inicializace HilltopAds VAST...", "info");
       } catch (e) {
-        console.error("FluidPlayer init error", e);
-        setIsAdPlaying(true); // Fallback to let timer run
+        console.error("FluidPlayer error:", e);
+        setIsAdPlaying(true);
       }
     } 
     else if (currentAdSystem === 'IMA' && window.videojs) {
       try {
-        // Initialize Video.js according to requested code
         const player = window.videojs(videoRef.current, {
           autoplay: true,
           muted: true,
           controls: false,
-          fluid: true
+          fluid: true,
+          sources: [{
+            // Dummy source often needed for some IMA implementations to behave correctly
+            src: 'https://vjs.zencdn.net/v/oceans.mp4',
+            type: 'video/mp4'
+          }]
         });
-        
+
         player.ima({
           adTagUrl: IMA_AD_TAG_URL,
+          showControlsForAds: false,
+          debug: false
+        });
+
+        // Some browsers require explicit initialization
+        player.on('ready', () => {
+          if (player.ima && player.ima.initializeAdDisplayContainer) {
+            player.ima.initializeAdDisplayContainer();
+            player.ima.requestAds();
+          }
+        });
+
+        player.on('adserror', (e: any) => {
+          console.warn("IMA Ads Error:", e);
+          addLog("IMA Uplink unstable, waiting for timeout...", "warn");
         });
 
         playerInstance.current = player;
         setIsAdPlaying(true);
-        addLog("Navazuji IMA uzel YourAdExchange...", "info");
+        addLog("Inicializace YourAdExchange IMA...", "info");
       } catch (e) {
-        console.error("IMA init error", e);
-        setIsAdPlaying(true); // Fallback to let timer run
+        console.error("IMA setup error:", e);
+        setIsAdPlaying(true);
       }
     }
 
@@ -173,7 +195,7 @@ export const GameView: React.FC = () => {
     };
   }, [videoAdVisible, currentAdSystem]);
 
-  // Timer logic for 60s gate
+  // Unified timer for 60s watch requirement
   useEffect(() => {
     let timer: number;
     if (videoAdVisible && isAdPlaying && videoAdTimer > 0) {
@@ -183,7 +205,7 @@ export const GameView: React.FC = () => {
     } else if (videoAdVisible && isAdPlaying && videoAdTimer === 0) {
       const autoCloseTimeout = setTimeout(() => {
         claimVideoReward();
-      }, 2000);
+      }, 1500);
       return () => clearTimeout(autoCloseTimeout);
     }
     return () => clearInterval(timer);
@@ -279,7 +301,7 @@ export const GameView: React.FC = () => {
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
       
-      {/* IMPROVED VIDEO AD MODAL - NO CLOSE BUTTON, AUTO CLOSURE */}
+      {/* IMPROVED VIDEO AD MODAL */}
       {videoAdVisible && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/98 backdrop-blur-3xl animate-in fade-in duration-500">
           <div className="w-full max-w-4xl bg-black border-2 border-[#00f3ff]/40 shadow-[0_0_150px_rgba(0,243,255,0.2)] relative overflow-hidden flex flex-col">
@@ -288,7 +310,7 @@ export const GameView: React.FC = () => {
                <div className="flex items-center gap-4">
                  <Signal className="text-red-600 animate-pulse" size={20} />
                  <span className="text-sm font-black uppercase tracking-[0.25em]">
-                   {currentAdSystem === 'HILLTOP' ? 'SECURE_UPLINK_HILLTOP' : 'SECURE_UPLINK_IMA'}
+                   {currentAdSystem === 'HILLTOP' ? 'SECURE_CHANNEL_HILLTOP' : 'SECURE_CHANNEL_IMA'}
                  </span>
                </div>
             </div>
@@ -297,7 +319,7 @@ export const GameView: React.FC = () => {
                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,243,255,0.05)_0%,transparent_70%)] pointer-events-none" />
 
                <div className="w-full h-full z-10 flex items-center justify-center">
-                  <video ref={videoRef} id="my-video" className="video-js vjs-default-skin w-full h-full">
+                  <video ref={videoRef} id="my-video" className="video-js vjs-default-skin w-full h-full" playsInline>
                     <source src="" type="video/mp4" />
                   </video>
                </div>
@@ -313,7 +335,7 @@ export const GameView: React.FC = () => {
                          )}
                          <div className="flex flex-col">
                             <span className="text-[11px] font-black uppercase tracking-[0.3em] text-[#00f3ff]">DATOVÝ_TOK_AKTIVNÍ</span>
-                            <span className="text-[9px] text-white/40 uppercase tracking-widest font-bold">SYNCHRONIZACE: {videoAdTimer}S</span>
+                            <span className="text-[9px] text-white/40 uppercase tracking-widest font-bold">ZABEZPEČENO: {videoAdTimer}S</span>
                          </div>
                        </div>
                        <div className="w-64 h-2 bg-white/5 relative rounded-full overflow-hidden border border-white/5">
@@ -327,7 +349,7 @@ export const GameView: React.FC = () => {
                           <p className="text-xs font-black uppercase tracking-[0.25em] text-green-400">PŘENOS_DOKONČEN</p>
                        </div>
                        <div className="bg-black/40 px-6 py-2 border border-white/10 text-[9px] uppercase tracking-widest text-white/40">
-                          Probíhá automatické zpracování...
+                          Probíhá dekódování a odměna...
                        </div>
                     </div>
                   )}
@@ -335,11 +357,11 @@ export const GameView: React.FC = () => {
             </div>
 
             <div className="p-4 bg-[#050505] flex justify-between items-center border-t border-white/5 px-8">
-               <span className="text-[8px] opacity-20 uppercase tracking-[0.4em]">Protocol: {currentAdSystem === 'HILLTOP' ? 'HilltopAds_VAST_v3' : 'YourAdEx_VideoJS_IMA'} | 0xDEADBEEF</span>
+               <span className="text-[8px] opacity-20 uppercase tracking-[0.4em]">Protocol: {currentAdSystem === 'HILLTOP' ? 'HilltopAds_VAST' : 'VideoJS_IMA_v3'} | 0xDEADBEEF</span>
                <div className="flex gap-4">
-                  {/* Fixed Manual link - pointing to homepage to avoid raw XML display error */}
+                  {/* Fixed Manual link - point to developer page instead of raw VAST XML to avoid the 'no style information' error */}
                   <button 
-                    onClick={() => window.open(currentAdSystem === 'HILLTOP' ? 'https://hilltopads.com' : 'https://google.com', '_blank')} 
+                    onClick={() => window.open(currentAdSystem === 'HILLTOP' ? 'https://hilltopads.com' : 'https://www.google.com/ads/publisher/', '_blank')} 
                     className="text-[8px] uppercase tracking-widest text-[#00f3ff]/40 hover:text-white flex items-center gap-1"
                   >
                     <ExternalLink size={10} /> Manuální_Odkaz
@@ -548,7 +570,7 @@ export const GameView: React.FC = () => {
                     <h2 className="text-7xl font-black text-white uppercase italic tracking-[0.4em] leading-tight neon-glow-cyan">VSTOUPIT_DO_MATRIXU</h2>
                     <p className="text-base text-[#00f3ff]/60 max-w-2xl mx-auto leading-loose tracking-[0.3em] uppercase font-black">
                       Detekována hluboká vrstva Sektoru 0x{expeditionLevel.toString(16).toUpperCase()}. <br/> 
-                      Nutná autorizace přes uzel <span className="text-[#ff00ff] neon-glow-pink">MULTI_AD_GATE</span>.
+                      Nutná autorizace přes uzel <span className="text-[#ff00ff] neon-glow-pink">MULTI_AD_SWITCH</span>.
                     </p>
                   </div>
                   <button 
