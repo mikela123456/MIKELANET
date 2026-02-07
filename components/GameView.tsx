@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { User, Zap, Compass, Truck, Timer, Trophy, Shield, Activity, Clock, Database, PlayCircle, Lock, Signal, Sword, Cpu, Wifi, RefreshCw, AlertTriangle, Play, LogOut, Database as MiningIcon } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { User, Compass, Truck, Timer, Shield, Activity, Clock, Database, PlayCircle, Lock, Signal, Sword, Cpu, Wifi, RefreshCw, LogOut, Database as MiningIcon } from 'lucide-react';
 
-// Add missing interfaces to fix TypeScript errors
+// Interfaces
 interface UpgradeItem {
   id: string;
   name: string;
@@ -17,7 +17,6 @@ interface ExpeditionLog {
   type: 'info' | 'warn' | 'success' | 'error';
 }
 
-// Declare fluidPlayer on window
 declare global {
   interface Window {
     fluidPlayer: any;
@@ -27,21 +26,19 @@ declare global {
 type GameTab = 'profile' | 'expeditions' | 'items';
 type ExpeditionPhase = 'COMBAT' | 'HARVESTING' | 'STABILIZING' | 'COMPLETED' | 'FAILED';
 
-// Seznam partnerů pro rotaci
+// Seznam partnerů pro rotaci - STŘÍDAVÉ POŘADÍ: VAST -> IFRAME -> VAST -> IFRAME
 const AD_PARTNERS = [
-  { id: 'HILLTOP', url: "https://groundedmine.com/d.mTFSzgdpGDNYvcZcGXUK/FeJm/9IuZZNUElDktPwTaYW3CNUz/YTwMNFD/ket-N/j_c/3qN/jPA/1cMuwy" },
-  { id: 'CLICKADILLA', url: "https://vast.yomeno.xyz/vast?spot_id=1480488" },
-  { id: 'ONCLICKA', url: "https://bid.onclckstr.com/vast?spot_id=6109953" }
+  { id: 'CLICKADILLA', url: "https://vast.yomeno.xyz/vast?spot_id=1480488", type: 'vast' },
+  { id: 'TUBECORPORATE', url: "https://hdzog.com/embed/71011?source=1933335898&autoplay=1", type: 'iframe' },
+  { id: 'ONCLICKA', url: "https://bid.onclckstr.com/vast?spot_id=6109953", type: 'vast' },
+  { id: 'TUBECORPORATE', url: "https://hdzog.com/embed/71011?source=1933335898&autoplay=1", type: 'iframe' },
+  { id: 'HILLTOP', url: "https://groundedmine.com/d.mTFSzgdpGDNYvcZcGXUK/FeJm/9IuZZNUElDktPwTaYW3CNUz/YTwMNFD/ket-N/j_c/3qN/jPA/1cMuwy", type: 'vast' },
+  { id: 'TUBECORPORATE', url: "https://hdzog.com/embed/71011?source=1933335898&autoplay=1", type: 'iframe' }
 ];
 
-// Cesta k lokálnímu souboru + Nature fallback (birds, whales, fish, ocean)
 const LOCAL_VIDEO_SRC = "/MIKELANET.mp4";
-const FALLBACK_VIDEO_SRC = "https://vjs.zencdn.net/v/oceans.mp4"; // Testovací video s oceánem a rybami
+const FALLBACK_VIDEO_SRC = "https://vjs.zencdn.net/v/oceans.mp4";
 
-/**
- * VideoStation: Přehrávač reklam a obsahu.
- * Využívá Fluid Player. Každá změna rebootKey způsobí totální re-mount celého kontejneru.
- */
 const VideoStation: React.FC<{ 
   partnerIndex: number, 
   rebootKey: number, 
@@ -77,58 +74,56 @@ const VideoStation: React.FC<{
       
       await new Promise(r => setTimeout(r, 800));
       
-      if (!isMounted || !videoRef.current || !window.fluidPlayer) return;
+      if (!isMounted) return;
 
-      try {
-        setIsTransitioning(false);
-        playerRef.current = window.fluidPlayer(videoRef.current, {
-          layoutControls: {
-            fillToContainer: true,
-            autoPlay: true,
-            mute: false, 
-            allowDownload: false,
-            playbackRateControl: false,
-            controlBar: { autoHide: true },
-            playButtonShowing: false,
-            htmlOnPauseBlock: { html: null, width: 0, height: 0 },
-            logo: { imageUrl: null },
-            keyboardControl: false
-          },
-          vastOptions: {
-            adList: [{ roll: 'preRoll', vastTag: partner.url }],
-            adStartedCallback: () => {
-              setIsAdPlaying(true);
-              document.body.classList.add('ad-playing');
-              onLog(`[Uzel ${partner.id}] Uplink reklamy aktivní.`, 'info');
+      if (partner.type === 'vast') {
+        if (!videoRef.current || !window.fluidPlayer) return;
+        try {
+          setIsTransitioning(false);
+          playerRef.current = window.fluidPlayer(videoRef.current, {
+            layoutControls: {
+              fillToContainer: true,
+              autoPlay: true,
+              mute: false, 
+              allowDownload: false,
+              playbackRateControl: false,
+              controlBar: { autoHide: true },
+              playButtonShowing: false,
+              htmlOnPauseBlock: { html: null, width: 0, height: 0 },
+              logo: { imageUrl: null },
+              keyboardControl: false
             },
-            adFinishedCallback: () => {
-              setIsAdPlaying(false);
-              document.body.classList.remove('ad-playing');
-              setShowContent(true);
-              onLog(`[Uzel ${partner.id}] Verifikace OK. Přehrávám video obsah.`, 'success');
-              playContent();
-            },
-            adErrorCallback: (err: any) => {
-              console.warn("Fluid VAST Error:", err);
-              setIsAdPlaying(false);
-              document.body.classList.remove('ad-playing');
-              setShowContent(true);
-              onLog(`[Uzel ${partner.id}] Chyba reklamy. Přechod na stream.`, 'error');
-              playContent();
-            }
-          }
-        });
-
-        if (videoRef.current) {
-          videoRef.current.addEventListener('ended', () => {
-            if (videoRef.current && !isAdPlaying) {
-               videoRef.current.play().catch(() => {});
+            vastOptions: {
+              adList: [{ roll: 'preRoll', vastTag: partner.url }],
+              adStartedCallback: () => {
+                setIsAdPlaying(true);
+                document.body.classList.add('ad-playing');
+                onLog(`[Uzel ${partner.id}] VAST Uplink aktivní.`, 'info');
+              },
+              adFinishedCallback: () => {
+                setIsAdPlaying(false);
+                document.body.classList.remove('ad-playing');
+                setShowContent(true);
+                onLog(`[Uzel ${partner.id}] Verifikace OK.`, 'success');
+                playContent();
+              },
+              adErrorCallback: (err: any) => {
+                console.warn("Fluid VAST Error:", err);
+                setIsAdPlaying(false);
+                document.body.classList.remove('ad-playing');
+                setShowContent(true);
+                onLog(`[Uzel ${partner.id}] Chyba VAST signálu. Přechod na stream.`, 'error');
+                playContent();
+              }
             }
           });
+        } catch (err) {
+          console.error("Fluid Player init error:", err);
         }
-
-      } catch (err) {
-        console.error("Fluid Player init error:", err);
+      } else {
+        setIsTransitioning(false);
+        setIsAdPlaying(true); 
+        onLog(`[Uzel ${partner.id}] Inicializace Iframe (Direct Link).`, 'info');
       }
     };
 
@@ -162,7 +157,7 @@ const VideoStation: React.FC<{
           </span>
         </div>
         <div className="flex items-center gap-4 text-[#00f3ff] text-[10px] font-black uppercase tracking-widest opacity-60">
-           UPLINK_{partnerIndex + 1} | STATUS: 60S_ROTATION
+           UPLINK_{partnerIndex + 1} | TYPE: {partner.type.toUpperCase()}
         </div>
       </div>
       
@@ -172,7 +167,7 @@ const VideoStation: React.FC<{
              <RefreshCw className="text-[#00f3ff] animate-spin" size={72} />
              <div className="text-center space-y-2">
                 <span className="text-[14px] font-black tracking-[1.5em] text-[#00f3ff] animate-pulse uppercase block">REBOOT_IN_PROGRESS</span>
-                <span className="text-[9px] text-[#ff00ff] uppercase tracking-[0.5em] animate-pulse">ESTABLISHING_NEW_CONNECTION_FOR_{partner.id}</span>
+                <span className="text-[9px] text-[#ff00ff] uppercase tracking-[0.5em] animate-pulse">SYNCING_{partner.id}</span>
              </div>
           </div>
         )}
@@ -181,13 +176,22 @@ const VideoStation: React.FC<{
           key={rebootKey} 
           className={`w-full h-full transition-opacity duration-500 ${isTransitioning ? 'opacity-0' : 'opacity-100'}`}
         >
-          <video 
-            ref={videoRef} 
-            className="video-js vjs-default-skin w-full h-full block" 
-            playsInline
-          >
-             <source src={FALLBACK_VIDEO_SRC} type="video/mp4" />
-          </video>
+          {partner.type === 'vast' ? (
+            <video 
+              ref={videoRef} 
+              className="video-js vjs-default-skin w-full h-full block" 
+              playsInline
+            >
+               <source src={FALLBACK_VIDEO_SRC} type="video/mp4" />
+            </video>
+          ) : (
+            <iframe 
+              src={partner.url} 
+              className="w-full h-full border-0" 
+              allow="autoplay; encrypted-media; fullscreen; picture-in-picture" 
+              allowFullScreen
+            />
+          )}
         </div>
 
         {showContent && !isAdPlaying && !isTransitioning && (
@@ -246,10 +250,8 @@ export const GameView: React.FC = () => {
     addLog(`Expedice ukončena. Trvání: ${Math.floor(elapsedTime / 60)}m ${elapsedTime % 60}s`, 'success');
   };
 
-  // 60s rotační cyklus - Reboot přehrávače
   useEffect(() => {
     if (!activeExpedition || phase === 'COMPLETED') return;
-
     const interval = setInterval(() => {
       setCycleTimer(prev => {
         if (prev <= 1) {
@@ -260,18 +262,14 @@ export const GameView: React.FC = () => {
         return prev - 1;
       });
     }, 1000);
-
     return () => clearInterval(interval);
   }, [activeExpedition, phase]);
 
-  // Infinite Expedition Timer & Currency Generator
   useEffect(() => {
     if (!activeExpedition || phase === 'COMPLETED') return;
-
     const timer = setInterval(() => {
       setElapsedTime(prev => {
         const next = prev + 1;
-        
         const cycleSeconds = next % 180;
         if (cycleSeconds < 60) setPhase('COMBAT');
         else if (cycleSeconds < 120) setPhase('HARVESTING');
@@ -279,22 +277,18 @@ export const GameView: React.FC = () => {
 
         if (next > 0 && next % 30 === 0) {
           const bonusMultiplier = 1 + (upgrades.find(u => u.id === 'tm')!.level * 0.15);
-          const baseReward = 4;
-          const totalReward = Math.floor(baseReward * bonusMultiplier);
+          const totalReward = Math.floor(4 * bonusMultiplier);
           setMikelaReserves(p => p + totalReward);
           addLog(`Generováno +${totalReward} MK (Interval 30s).`, 'success');
         }
-
         return next;
       });
     }, 1000);
-
     return () => clearInterval(timer);
   }, [activeExpedition, phase, upgrades]);
 
   return (
     <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
-      
       <aside className="w-20 md:w-64 border-r border-white/5 bg-black/60 flex flex-col py-8 z-20 backdrop-blur-md">
         <div className="mb-14 flex flex-col items-center gap-3">
           <Database className="text-[#00f3ff] animate-pulse" size={28} />
@@ -323,10 +317,6 @@ export const GameView: React.FC = () => {
           <div className="flex flex-col h-full animate-in fade-in duration-700 bg-[#050505]">
             <div className="px-12 py-6 border-b border-[#00f3ff]/20 bg-black flex justify-between items-center z-10 shadow-2xl">
               <div className="flex items-center gap-10">
-                {/* 
-                   DYNAMICKÝ MINING PANEL S GLITCH ANIMACÍ 
-                   Nahrazuje statické EXP_SESSION_ID
-                */}
                 <div className="relative group/mining bg-[#00f3ff]/5 border border-[#00f3ff]/10 px-4 py-1.5 rounded-sm">
                    <div className="absolute inset-0 bg-[#00f3ff]/10 opacity-0 group-hover/mining:opacity-100 transition-opacity pointer-events-none" />
                    <div className="flex flex-col">
@@ -341,7 +331,6 @@ export const GameView: React.FC = () => {
                          </span>
                       </div>
                    </div>
-                   {/* Spodní progress bar mining cyklu */}
                    <div className="absolute bottom-0 left-0 h-[2px] bg-[#00f3ff] shadow-[0_0_10px_#00f3ff]" style={{ width: `${(elapsedTime % 30 / 30) * 100}%` }} />
                 </div>
 
@@ -351,29 +340,19 @@ export const GameView: React.FC = () => {
                    <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-[#ff00ff] animate-ping" />
                       <span className="text-xs font-bold text-white uppercase tracking-tighter">
-                         {AD_PARTNERS[partnerIndex].id} (NEXT_REBOOT: {cycleTimer}s)
+                         {AD_PARTNERS[partnerIndex].id} (NEXT: {cycleTimer}s)
                       </span>
                    </div>
                 </div>
               </div>
 
               <div className="flex items-center gap-8">
-                 <div className="text-right">
-                    <span className="text-[8px] text-white/30 uppercase font-black block mb-1">MISSION_STATUS</span>
-                    <span className="text-sm font-black text-[#00f3ff] uppercase tracking-widest">ACTIVE: {phase}</span>
-                 </div>
-                 {/* 
-                    HUD TIMER BUTTON 
-                    Změní se na UKONČIT při najetí myší (hover)
-                 */}
                  <button 
                     onClick={terminateExpedition}
                     onMouseEnter={() => setIsTimerHovered(true)}
                     onMouseLeave={() => setIsTimerHovered(false)}
                     className={`flex items-center gap-4 border px-8 py-3 rounded shadow-lg transition-all duration-300 min-w-[140px] justify-center ${
-                        isTimerHovered 
-                        ? 'bg-[#ff00ff]/20 border-[#ff00ff] shadow-[0_0_20px_rgba(255,0,255,0.4)]' 
-                        : 'bg-[#00f3ff]/10 border-[#00f3ff]/30 shadow-[0_0_20px_rgba(0,243,255,0.2)]'
+                        isTimerHovered ? 'bg-[#ff00ff]/20 border-[#ff00ff] shadow-[0_0_20px_rgba(255,0,255,0.4)]' : 'bg-[#00f3ff]/10 border-[#00f3ff]/30 shadow-[0_0_20px_rgba(0,243,255,0.2)]'
                     }`}
                  >
                     {isTimerHovered ? (
@@ -396,9 +375,7 @@ export const GameView: React.FC = () => {
             <div className="flex-1 flex overflow-hidden">
                <div className="flex-1 flex flex-col p-8 gap-8 overflow-hidden relative">
                   <div className="absolute inset-0 tactical-grid opacity-5 pointer-events-none" />
-                  
                   <VideoStation partnerIndex={partnerIndex} rebootKey={rebootKey} onLog={addLog} />
-
                   <div className="w-full max-w-4xl mx-auto flex-1 border border-[#00f3ff]/20 bg-black/60 p-8 flex flex-col gap-8 overflow-hidden relative shadow-inner rounded-sm">
                      <div className="flex justify-between items-center border-b border-[#00f3ff]/10 pb-4">
                         <div className="flex items-center gap-4">
@@ -406,38 +383,36 @@ export const GameView: React.FC = () => {
                            <span className="text-[11px] font-black uppercase tracking-[0.5em] text-[#00f3ff]">UPLINK_SYSTEM_v12.2</span>
                         </div>
                         <div className="flex gap-4 text-[#00f3ff]/40 text-[9px] font-black uppercase tracking-widest">
-                           REWARD_BLOCK: 4 MK | PARTNER_{partnerIndex + 1}/3
+                           REWARD_BLOCK: 4 MK | PARTNER_{partnerIndex + 1}/{AD_PARTNERS.length}
                         </div>
                      </div>
-
                      <div className="flex-1 relative flex items-center justify-center">
                         {phase === 'COMBAT' && (
-                           <div className="flex flex-col items-center gap-12 animate-in zoom-in duration-700 text-center">
-                              <Sword size={140} className="text-red-600 animate-bounce drop-shadow-[0_0_30px_red]" />
-                              <p className="text-[14px] text-red-500 font-black uppercase tracking-[1.8em] animate-pulse">BYPASSING_PROTECTION</p>
+                           <div className="flex flex-col items-center gap-12 animate-in zoom-in duration-700 text-center text-red-600">
+                              <Sword size={140} className="animate-bounce drop-shadow-[0_0_30px_red]" />
+                              <p className="text-[14px] font-black uppercase tracking-[1.8em] animate-pulse">BYPASSING_PROTECTION</p>
                            </div>
                         )}
                         {phase === 'HARVESTING' && (
-                           <div className="flex flex-col items-center gap-12 animate-in slide-in-from-bottom-24 duration-700 text-center">
-                              <Cpu size={120} className="text-green-500 animate-spin-slow drop-shadow-[0_0_30px_green]" />
-                              <div className="w-[450px] h-3 bg-white/5 rounded-full overflow-hidden border border-white/10 p-1 shadow-[0_0_150px_rgba(0,255,0,0.1)]">
+                           <div className="flex flex-col items-center gap-12 animate-in slide-in-from-bottom-24 duration-700 text-center text-green-500">
+                              <Cpu size={120} className="animate-spin-slow drop-shadow-[0_0_30px_green]" />
+                              <div className="w-[450px] h-3 bg-white/5 rounded-full overflow-hidden border border-white/10 p-1">
                                  <div className="h-full bg-green-500 animate-loading-bar rounded-full" />
                               </div>
-                              <p className="text-[14px] text-green-500 font-black uppercase tracking-[1.8em] animate-pulse">HARVESTING_MK_NODES</p>
+                              <p className="text-[14px] font-black uppercase tracking-[1.8em] animate-pulse">HARVESTING_MK_NODES</p>
                            </div>
                         )}
                         {phase === 'STABILIZING' && (
-                           <div className="flex flex-col items-center gap-12 animate-in fade-in duration-700 text-center">
-                              <Wifi size={140} className="text-[#00f3ff] animate-pulse drop-shadow-[0_0_40px_#00f3ff]" />
-                              <p className="text-[14px] text-[#00f3ff] font-black uppercase tracking-[1.8em] animate-pulse">STABILIZING_UPLINK</p>
+                           <div className="flex flex-col items-center gap-12 animate-in fade-in duration-700 text-center text-[#00f3ff]">
+                              <Wifi size={140} className="animate-pulse drop-shadow-[0_0_40px_#00f3ff]" />
+                              <p className="text-[14px] font-black uppercase tracking-[1.8em] animate-pulse">STABILIZING_UPLINK</p>
                            </div>
                         )}
                      </div>
-
                      <div className="mt-auto space-y-6">
                         <div className="flex justify-between text-[12px] font-black uppercase tracking-[0.8em] text-[#00f3ff]/60">
                            <span>MISSION_DURATION</span>
-                           <span className="text-white shadow-white">{Math.floor(elapsedTime / 3600)}h {Math.floor((elapsedTime % 3600) / 60)}m {elapsedTime % 60}s</span>
+                           <span className="text-white">{Math.floor(elapsedTime / 3600)}h {Math.floor((elapsedTime % 3600) / 60)}m {elapsedTime % 60}s</span>
                         </div>
                         <div className="h-4 w-full bg-white/5 relative rounded-full overflow-hidden border border-[#00f3ff]/20 p-1">
                            <div className="h-full bg-gradient-to-r from-red-600 via-[#00f3ff] to-green-600 shadow-[0_0_30px_rgba(0,243,255,0.8)] transition-all duration-[2000ms] rounded-full" style={{ width: `${(elapsedTime % 30 / 30) * 100}%` }} />
@@ -445,8 +420,7 @@ export const GameView: React.FC = () => {
                      </div>
                   </div>
                </div>
-
-               <div className="w-80 border-l border-white/5 bg-black/80 flex flex-col p-8 gap-6 z-10 backdrop-blur-3xl shadow-2xl">
+               <div className="w-80 border-l border-white/5 bg-black/80 flex flex-col p-8 gap-6 z-10 backdrop-blur-3xl shadow-2xl overflow-hidden">
                   <div className="flex items-center gap-3 border-b border-[#00f3ff]/30 pb-4">
                      <Activity size={20} className="text-[#00f3ff]" />
                      <span className="text-[12px] font-black uppercase tracking-[0.5em] text-[#00f3ff]">SYSTEM_LOGGER</span>
@@ -463,7 +437,7 @@ export const GameView: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="max-w-7xl mx-auto py-24 px-16 w-full h-full overflow-y-auto custom-scrollbar bg-[radial-gradient(circle_at_center,rgba(0,243,255,0.03)_0%,transparent_100%)]">
+          <div className="max-w-7xl mx-auto py-24 px-16 w-full h-full overflow-y-auto custom-scrollbar">
             {activeTab === 'profile' && (
               <div className="space-y-24 animate-in slide-in-from-bottom-16 duration-1000">
                 <div className="flex flex-col lg:flex-row items-center gap-24 p-24 bg-white/[0.01] border-2 border-[#00f3ff]/20 relative overflow-hidden group rounded-lg shadow-2xl backdrop-blur-md">
@@ -490,20 +464,6 @@ export const GameView: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-16">
-                   {[
-                     { label: 'System Tier', val: `0x${expeditionLevel.toString(16).toUpperCase()}`, color: '#00f3ff', icon: Signal },
-                     { label: 'Stream Integrity', val: '99.9%', color: '#ff00ff', icon: Zap },
-                     { label: 'Uplink Quality', val: 'MAX_SECURE', color: '#10b981', icon: Shield }
-                   ].map((stat, i) => (
-                    <div key={i} className="p-16 border-2 border-white/5 bg-white/[0.01] hover:bg-white/[0.04] transition-all hover:-translate-y-5 duration-500 group relative overflow-hidden rounded-md shadow-2xl">
-                       <span className="text-[13px] text-white/30 uppercase font-black tracking-[0.6em] block mb-10">{stat.label}</span>
-                       <p className="text-7xl font-black italic tracking-tighter" style={{ color: stat.color }}>{stat.val}</p>
-                       <stat.icon className="absolute bottom-6 right-6 opacity-5" size={100} />
-                    </div>
-                   ))}
                 </div>
               </div>
             )}
@@ -560,11 +520,7 @@ export const GameView: React.FC = () => {
                           }}
                           className={`w-full py-14 border-4 font-black text-xl uppercase tracking-[0.8em] transition-all mt-auto flex items-center justify-center gap-10 shadow-2xl rounded-sm ${canAfford ? 'border-[#ff00ff] text-[#ff00ff] hover:bg-[#ff00ff] hover:text-black shadow-[0_0_40px_rgba(255,0,255,0.3)]' : 'border-white/10 text-white/10'}`}
                         >
-                          {canAfford ? (
-                            <>UPGRADE | {cost.toLocaleString()} MK</>
-                          ) : (
-                            <><Lock size={32} /> REZERVY_LOW</>
-                          )}
+                          {canAfford ? <>UPGRADE | {cost.toLocaleString()} MK</> : <><Lock size={32} /> REZERVY_LOW</>}
                         </button>
                       </div>
                     )
@@ -586,49 +542,12 @@ export const GameView: React.FC = () => {
         }
         .animate-spin-slow { animation: spin 30s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes loading-bar {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(600%); }
-        }
+        @keyframes loading-bar { 0% { transform: translateX(-100%); } 100% { transform: translateX(600%); } }
         .animate-loading-bar { animation: loading-bar 4.5s infinite linear; }
         .neon-glow-cyan { text-shadow: 0 0 15px #00f3ff, 0 0 30px #00f3ff; }
         .neon-glow-pink { text-shadow: 0 0 15px #ff00ff, 0 0 30px #ff00ff; }
-
-        /* Glitch Animation for Mining Panel */
-        @keyframes glitch {
-          0% { transform: translate(0); text-shadow: -2px 0 #ff00ff, 2px 0 #00f3ff; }
-          25% { transform: translate(-1px, 1px); }
-          50% { transform: translate(1px, -1px); text-shadow: 2px 0 #ff00ff, -2px 0 #00f3ff; }
-          75% { transform: translate(-1px, -1px); }
-          100% { transform: translate(0); text-shadow: -2px 0 #ff00ff, 2px 0 #00f3ff; }
-        }
-        .glitch-text {
-          position: relative;
-          display: inline-block;
-          animation: glitch 3s infinite linear alternate-reverse;
-        }
-        .glitch-text::before,
-        .glitch-text::after {
-          content: attr(data-text);
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          opacity: 0.8;
-        }
-        .glitch-text::before {
-          animation: glitch 1.5s infinite linear alternate-reverse;
-          color: #ff00ff;
-          z-index: -1;
-          left: -2px;
-        }
-        .glitch-text::after {
-          animation: glitch 2s infinite linear alternate-reverse;
-          color: #00f3ff;
-          z-index: -2;
-          left: 2px;
-        }
+        @keyframes glitch { 0% { transform: translate(0); text-shadow: -2px 0 #ff00ff, 2px 0 #00f3ff; } 50% { transform: translate(1px, -1px); text-shadow: 2px 0 #ff00ff, -2px 0 #00f3ff; } 100% { transform: translate(0); } }
+        .glitch-text { position: relative; display: inline-block; animation: glitch 3s infinite linear alternate-reverse; }
       `}</style>
     </div>
   );
