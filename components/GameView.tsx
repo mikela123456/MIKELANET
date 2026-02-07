@@ -148,26 +148,26 @@ const VideoStation: React.FC<{
   }, [rebootKey]);
 
   return (
-    <div className="w-full max-w-4xl mx-auto flex flex-col border-2 border-[#00f3ff]/40 bg-black shadow-[0_0_150px_rgba(0,0,0,1)] relative z-50 rounded-sm overflow-hidden min-h-[300px]">
-      <div className="bg-[#050505] p-3 flex justify-between items-center border-b border-[#00f3ff]/20">
-        <div className="flex items-center gap-3">
-          <div className={`w-2.5 h-2.5 rounded-full ${isAdPlaying ? 'bg-red-500 animate-pulse shadow-[0_0_12px_red]' : 'bg-[#00f3ff] shadow-[0_0_12px_#00f3ff]'}`} />
-          <span className="text-[10px] uppercase font-black tracking-[0.25em] text-[#00f3ff]/90">
+    <div className="w-full max-w-4xl mx-auto flex flex-col border border-[#00f3ff]/40 md:border-2 bg-black shadow-[0_0_150px_rgba(0,0,0,1)] relative z-50 rounded-sm overflow-hidden min-h-[200px] md:min-h-[300px]">
+      <div className="bg-[#050505] p-2 md:p-3 flex justify-between items-center border-b border-[#00f3ff]/20">
+        <div className="flex items-center gap-2 md:gap-3">
+          <div className={`w-2 h-2 md:w-2.5 md:h-2.5 rounded-full ${isAdPlaying ? 'bg-red-500 animate-pulse shadow-[0_0_12px_red]' : 'bg-[#00f3ff] shadow-[0_0_12px_#00f3ff]'}`} />
+          <span className="text-[8px] md:text-[10px] uppercase font-black tracking-[0.15em] md:tracking-[0.25em] text-[#00f3ff]/90">
             {isAdPlaying ? `AD_SYNC: ${partner.id}` : showContent ? 'STREAM_CONNECTED' : 'SYSTEM_REBOOTING'}
           </span>
         </div>
-        <div className="flex items-center gap-4 text-[#00f3ff] text-[10px] font-black uppercase tracking-widest opacity-60">
-           UPLINK_{partnerIndex + 1} | TYPE: {partner.type.toUpperCase()}
+        <div className="flex items-center gap-2 md:gap-4 text-[#00f3ff] text-[8px] md:text-[10px] font-black uppercase tracking-widest opacity-60">
+           UPLINK_{partnerIndex + 1}
         </div>
       </div>
       
       <div className="aspect-video bg-black flex items-center justify-center relative w-full h-full">
         {isTransitioning && (
-          <div className="absolute inset-0 z-[110] bg-[#020202] flex flex-col items-center justify-center gap-6">
-             <RefreshCw className="text-[#00f3ff] animate-spin" size={72} />
-             <div className="text-center space-y-2">
-                <span className="text-[14px] font-black tracking-[1.5em] text-[#00f3ff] animate-pulse uppercase block">REBOOT_IN_PROGRESS</span>
-                <span className="text-[9px] text-[#ff00ff] uppercase tracking-[0.5em] animate-pulse">SYNCING_{partner.id}</span>
+          <div className="absolute inset-0 z-[110] bg-[#020202] flex flex-col items-center justify-center gap-3 md:gap-6">
+             <RefreshCw className="text-[#00f3ff] animate-spin" size={32} md:size={72} />
+             <div className="text-center space-y-1">
+                <span className="text-[10px] md:text-[14px] font-black tracking-[0.5em] md:tracking-[1.5em] text-[#00f3ff] animate-pulse uppercase block">REBOOT</span>
+                <span className="text-[7px] text-[#ff00ff] uppercase tracking-[0.2em] animate-pulse">SYNCING_{partner.id}</span>
              </div>
           </div>
         )}
@@ -195,9 +195,9 @@ const VideoStation: React.FC<{
         </div>
 
         {showContent && !isAdPlaying && !isTransitioning && (
-          <div className="absolute top-4 right-4 z-[100] bg-black/80 border border-[#00f3ff]/40 p-2 flex items-center gap-2 pointer-events-none">
-             <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse" />
-             <span className="text-[9px] font-black text-white uppercase tracking-widest">LIVE_DATA_FEED</span>
+          <div className="absolute top-2 right-2 md:top-4 md:right-4 z-[100] bg-black/80 border border-[#00f3ff]/40 p-1 md:p-2 flex items-center gap-1 md:gap-2 pointer-events-none">
+             <div className="w-1.5 h-1.5 md:w-2 md:h-2 bg-red-600 rounded-full animate-pulse" />
+             <span className="text-[7px] md:text-[9px] font-black text-white uppercase tracking-widest">LIVE</span>
           </div>
         )}
       </div>
@@ -240,14 +240,13 @@ export const GameView: React.FC = () => {
     setRebootKey(k => k + 1);
     setCycleTimer(60);
     addLog(`Uplink inicializován. Sektor 0x${expeditionLevel.toString(16).toUpperCase()}`, 'info');
-    addLog(`Expedice bez časového limitu zahájena.`, 'warn');
   };
 
   const terminateExpedition = () => {
     setActiveExpedition(false);
     setIsTimerHovered(false);
     setReputation(p => p + Math.floor(elapsedTime / 10) * 5); 
-    addLog(`Expedice ukončena. Trvání: ${Math.floor(elapsedTime / 60)}m ${elapsedTime % 60}s`, 'success');
+    addLog(`Expedice ukončena.`, 'success');
   };
 
   useEffect(() => {
@@ -279,7 +278,7 @@ export const GameView: React.FC = () => {
           const bonusMultiplier = 1 + (upgrades.find(u => u.id === 'tm')!.level * 0.15);
           const totalReward = Math.floor(4 * bonusMultiplier);
           setMikelaReserves(p => p + totalReward);
-          addLog(`Generováno +${totalReward} MK (Interval 30s).`, 'success');
+          addLog(`Generováno +${totalReward} MK.`, 'success');
         }
         return next;
       });
@@ -287,149 +286,139 @@ export const GameView: React.FC = () => {
     return () => clearInterval(timer);
   }, [activeExpedition, phase, upgrades]);
 
+  const navItems = [
+    { id: 'profile' as GameTab, icon: User, label: 'Profil' },
+    { id: 'expeditions' as GameTab, icon: Compass, label: 'Expedice' },
+    { id: 'items' as GameTab, icon: Shield, label: 'Arzenál' },
+  ];
+
   return (
-    <div className="flex h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
-      <aside className="w-20 md:w-64 border-r border-white/5 bg-black/60 flex flex-col py-8 z-20 backdrop-blur-md">
+    <div className="flex flex-col md:flex-row h-full w-full bg-[#020202] border-t border-[#00f3ff]/10 relative overflow-hidden font-mono text-[#00f3ff]">
+      
+      {/* Sidebar - Hidden on mobile, Bottom Nav instead */}
+      <aside className="hidden md:flex w-64 border-r border-white/5 bg-black/60 flex-col py-8 z-20 backdrop-blur-md">
         <div className="mb-14 flex flex-col items-center gap-3">
           <Database className="text-[#00f3ff] animate-pulse" size={28} />
-          <span className="hidden md:block text-[9px] text-[#00f3ff]/40 uppercase font-black tracking-[0.6em]">MATRIX_CONTROL</span>
+          <span className="text-[9px] text-[#00f3ff]/40 uppercase font-black tracking-[0.6em]">MATRIX_CONTROL</span>
         </div>
         <nav className="flex-1 space-y-3 px-3">
-          {[
-            { id: 'profile' as GameTab, icon: User, label: 'Profil' },
-            { id: 'expeditions' as GameTab, icon: Compass, label: 'Expedice' },
-            { id: 'items' as GameTab, icon: Shield, label: 'Arzenál' },
-          ].map((item) => (
+          {navItems.map((item) => (
             <button
               key={item.id}
               onClick={() => { setActiveTab(item.id); if(!activeExpedition) setActiveExpedition(false); }}
-              className={`w-full flex items-center justify-center md:justify-start gap-4 p-5 transition-all duration-300 rounded-xl ${activeTab === item.id ? 'bg-[#00f3ff]/15 text-[#00f3ff] border-r-4 border-[#00f3ff] shadow-[inset_0_0_20px_rgba(0,243,255,0.15)]' : 'text-white/20 hover:text-white hover:bg-white/5'}`}
+              className={`w-full flex items-center justify-start gap-4 p-5 transition-all duration-300 rounded-xl ${activeTab === item.id ? 'bg-[#00f3ff]/15 text-[#00f3ff] border-r-4 border-[#00f3ff] shadow-[inset_0_0_20px_rgba(0,243,255,0.15)]' : 'text-white/20 hover:text-white hover:bg-white/5'}`}
             >
               <item.icon size={22} />
-              <span className="hidden md:block text-[11px] font-black uppercase tracking-[0.2em]">{item.label}</span>
+              <span className="text-[11px] font-black uppercase tracking-[0.2em]">{item.label}</span>
             </button>
           ))}
         </nav>
       </aside>
 
-      <main className="flex-1 relative flex flex-col overflow-hidden">
+      <main className="flex-1 relative flex flex-col overflow-hidden pb-16 md:pb-0">
         {activeExpedition ? (
-          <div className="flex flex-col h-full animate-in fade-in duration-700 bg-[#050505]">
-            <div className="px-12 py-6 border-b border-[#00f3ff]/20 bg-black flex justify-between items-center z-10 shadow-2xl">
-              <div className="flex items-center gap-10">
-                <div className="relative group/mining bg-[#00f3ff]/5 border border-[#00f3ff]/10 px-4 py-1.5 rounded-sm">
-                   <div className="absolute inset-0 bg-[#00f3ff]/10 opacity-0 group-hover/mining:opacity-100 transition-opacity pointer-events-none" />
+          <div className="flex flex-col h-full animate-in fade-in duration-700 bg-[#050505] overflow-y-auto md:overflow-hidden">
+            <div className="px-4 md:px-12 py-4 md:py-6 border-b border-[#00f3ff]/20 bg-black flex flex-col md:flex-row justify-between items-center z-10 gap-4 md:gap-0">
+              <div className="flex items-center gap-4 md:gap-10 w-full md:w-auto justify-between md:justify-start">
+                <div className="relative group/mining bg-[#00f3ff]/5 border border-[#00f3ff]/10 px-2 md:px-4 py-1.5 rounded-sm flex-1 md:flex-none">
                    <div className="flex flex-col">
-                      <div className="flex items-center gap-2">
-                         <div className="w-1.5 h-1.5 rounded-full bg-[#00f3ff] animate-pulse" />
-                         <span className="text-[9px] text-[#00f3ff] font-black uppercase tracking-[0.3em] glitch-text" data-text="MK_MINING_LINK">MK_MINING_LINK</span>
+                      <div className="flex items-center gap-1 md:gap-2">
+                         <div className="w-1 md:w-1.5 h-1 md:h-1.5 rounded-full bg-[#00f3ff] animate-pulse" />
+                         <span className="text-[7px] md:text-[9px] text-[#00f3ff] font-black uppercase tracking-[0.2em] md:tracking-[0.3em]">MK_MINING</span>
                       </div>
-                      <div className="flex items-center gap-3">
-                         <MiningIcon size={12} className="text-[#00f3ff]/60" />
-                         <span className="text-xl font-black text-white italic tracking-tighter tabular-nums">
-                            {30 - (elapsedTime % 30)}S <span className="text-[10px] text-[#00f3ff]/40 not-italic tracking-widest uppercase ml-1">DO_PAYOUT</span>
+                      <div className="flex items-center gap-2 md:gap-3">
+                         <span className="text-sm md:text-xl font-black text-white italic tracking-tighter tabular-nums">
+                            {30 - (elapsedTime % 30)}S
                          </span>
                       </div>
                    </div>
-                   <div className="absolute bottom-0 left-0 h-[2px] bg-[#00f3ff] shadow-[0_0_10px_#00f3ff]" style={{ width: `${(elapsedTime % 30 / 30) * 100}%` }} />
                 </div>
 
-                <div className="h-10 w-px bg-white/10" />
-                <div className="flex flex-col">
-                   <span className="text-[8px] text-[#ff00ff]/40 uppercase font-black tracking-widest">REBOOT_SYNC_CLOCK</span>
-                   <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-[#ff00ff] animate-ping" />
-                      <span className="text-xs font-bold text-white uppercase tracking-tighter">
-                         {AD_PARTNERS[partnerIndex].id} (NEXT: {cycleTimer}s)
+                <div className="hidden md:block h-10 w-px bg-white/10" />
+                
+                <div className="flex flex-col text-right md:text-left">
+                   <span className="text-[7px] md:text-[8px] text-[#ff00ff]/40 uppercase font-black tracking-widest">REBOOT_SYNC</span>
+                   <div className="flex items-center gap-1 md:gap-2 justify-end md:justify-start">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#ff00ff] animate-ping" />
+                      <span className="text-[9px] md:text-xs font-bold text-white uppercase tracking-tighter">
+                         {AD_PARTNERS[partnerIndex].id} ({cycleTimer}s)
                       </span>
                    </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-8">
+              <div className="flex items-center gap-4 md:gap-8 w-full md:w-auto">
+                 <div className="flex-1 text-left md:text-right">
+                    <span className="text-[7px] md:text-[8px] text-white/30 uppercase font-black block">STATUS</span>
+                    <span className="text-[10px] md:text-sm font-black text-[#00f3ff] uppercase tracking-widest">{phase}</span>
+                 </div>
                  <button 
                     onClick={terminateExpedition}
-                    onMouseEnter={() => setIsTimerHovered(true)}
-                    onMouseLeave={() => setIsTimerHovered(false)}
-                    className={`flex items-center gap-4 border px-8 py-3 rounded shadow-lg transition-all duration-300 min-w-[140px] justify-center ${
-                        isTimerHovered ? 'bg-[#ff00ff]/20 border-[#ff00ff] shadow-[0_0_20px_rgba(255,0,255,0.4)]' : 'bg-[#00f3ff]/10 border-[#00f3ff]/30 shadow-[0_0_20px_rgba(0,243,255,0.2)]'
-                    }`}
+                    className={`flex items-center gap-2 md:gap-4 border px-4 md:px-8 py-2 md:py-3 rounded shadow-lg transition-all duration-300 min-w-[100px] md:min-w-[140px] justify-center bg-[#ff00ff]/10 border-[#ff00ff]/30`}
                  >
-                    {isTimerHovered ? (
-                        <>
-                            <LogOut size={18} className="text-[#ff00ff] animate-pulse" />
-                            <span className="text-xl font-black text-[#ff00ff] uppercase tracking-[0.2em]">UKONČIT</span>
-                        </>
-                    ) : (
-                        <>
-                            <Clock size={18} className="animate-pulse text-[#00f3ff]" />
-                            <span className="text-2xl font-mono font-black tabular-nums text-white">
-                                {Math.floor(elapsedTime / 60)}:{String(elapsedTime % 60).padStart(2, '0')}
-                            </span>
-                        </>
-                    )}
+                    <LogOut size={14} className="text-[#ff00ff]" />
+                    <span className="text-xs md:text-xl font-black text-[#ff00ff] uppercase tracking-[0.1em] md:tracking-[0.2em]">UKONČIT</span>
                  </button>
               </div>
             </div>
 
-            <div className="flex-1 flex overflow-hidden">
-               <div className="flex-1 flex flex-col p-8 gap-8 overflow-hidden relative">
+            <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+               <div className="flex-1 flex flex-col p-4 md:p-8 gap-4 md:gap-8 overflow-y-auto md:overflow-hidden relative">
                   <div className="absolute inset-0 tactical-grid opacity-5 pointer-events-none" />
+                  
                   <VideoStation partnerIndex={partnerIndex} rebootKey={rebootKey} onLog={addLog} />
-                  <div className="w-full max-w-4xl mx-auto flex-1 border border-[#00f3ff]/20 bg-black/60 p-8 flex flex-col gap-8 overflow-hidden relative shadow-inner rounded-sm">
-                     <div className="flex justify-between items-center border-b border-[#00f3ff]/10 pb-4">
-                        <div className="flex items-center gap-4">
-                           <Sword size={22} className={phase === 'COMBAT' ? 'text-red-600 animate-bounce' : 'text-[#00f3ff]/10'} />
-                           <span className="text-[11px] font-black uppercase tracking-[0.5em] text-[#00f3ff]">UPLINK_SYSTEM_v12.2</span>
+                  
+                  <div className="w-full max-w-4xl mx-auto flex-1 border border-[#00f3ff]/20 bg-black/60 p-4 md:p-8 flex flex-col gap-4 md:gap-8 overflow-hidden relative shadow-inner rounded-sm min-h-[300px]">
+                     <div className="flex justify-between items-center border-b border-[#00f3ff]/10 pb-2 md:pb-4">
+                        <div className="flex items-center gap-2 md:gap-4">
+                           <Sword size={16} md:size={22} className={phase === 'COMBAT' ? 'text-red-600 animate-bounce' : 'text-[#00f3ff]/10'} />
+                           <span className="text-[9px] md:text-[11px] font-black uppercase tracking-[0.3em] md:tracking-[0.5em] text-[#00f3ff]">UPLINK_SYSTEM</span>
                         </div>
-                        <div className="flex gap-4 text-[#00f3ff]/40 text-[9px] font-black uppercase tracking-widest">
-                           REWARD_BLOCK: 4 MK | PARTNER_{partnerIndex + 1}/{AD_PARTNERS.length}
+                        <div className="text-[#00f3ff]/40 text-[7px] md:text-[9px] font-black uppercase tracking-widest">
+                           {partnerIndex + 1}/{AD_PARTNERS.length}
                         </div>
                      </div>
+                     
                      <div className="flex-1 relative flex items-center justify-center">
                         {phase === 'COMBAT' && (
-                           <div className="flex flex-col items-center gap-12 animate-in zoom-in duration-700 text-center text-red-600">
-                              <Sword size={140} className="animate-bounce drop-shadow-[0_0_30px_red]" />
-                              <p className="text-[14px] font-black uppercase tracking-[1.8em] animate-pulse">BYPASSING_PROTECTION</p>
+                           <div className="flex flex-col items-center gap-6 md:gap-12 text-center text-red-600">
+                              <Sword size={60} md:size={140} className="animate-bounce" />
+                              <p className="text-[10px] md:text-[14px] font-black uppercase tracking-[1em] md:tracking-[1.8em] animate-pulse">BYPASSING</p>
                            </div>
                         )}
                         {phase === 'HARVESTING' && (
-                           <div className="flex flex-col items-center gap-12 animate-in slide-in-from-bottom-24 duration-700 text-center text-green-500">
-                              <Cpu size={120} className="animate-spin-slow drop-shadow-[0_0_30px_green]" />
-                              <div className="w-[450px] h-3 bg-white/5 rounded-full overflow-hidden border border-white/10 p-1">
-                                 <div className="h-full bg-green-500 animate-loading-bar rounded-full" />
-                              </div>
-                              <p className="text-[14px] font-black uppercase tracking-[1.8em] animate-pulse">HARVESTING_MK_NODES</p>
+                           <div className="flex flex-col items-center gap-6 md:gap-12 text-center text-green-500">
+                              <Cpu size={50} md:size={120} className="animate-spin-slow" />
+                              <p className="text-[10px] md:text-[14px] font-black uppercase tracking-[1em] md:tracking-[1.8em] animate-pulse">HARVESTING</p>
                            </div>
                         )}
                         {phase === 'STABILIZING' && (
-                           <div className="flex flex-col items-center gap-12 animate-in fade-in duration-700 text-center text-[#00f3ff]">
-                              <Wifi size={140} className="animate-pulse drop-shadow-[0_0_40px_#00f3ff]" />
-                              <p className="text-[14px] font-black uppercase tracking-[1.8em] animate-pulse">STABILIZING_UPLINK</p>
+                           <div className="flex flex-col items-center gap-6 md:gap-12 text-center text-[#00f3ff]">
+                              <Wifi size={60} md:size={140} className="animate-pulse" />
+                              <p className="text-[10px] md:text-[14px] font-black uppercase tracking-[1em] md:tracking-[1.8em] animate-pulse">STABILIZING</p>
                            </div>
                         )}
                      </div>
-                     <div className="mt-auto space-y-6">
-                        <div className="flex justify-between text-[12px] font-black uppercase tracking-[0.8em] text-[#00f3ff]/60">
-                           <span>MISSION_DURATION</span>
-                           <span className="text-white">{Math.floor(elapsedTime / 3600)}h {Math.floor((elapsedTime % 3600) / 60)}m {elapsedTime % 60}s</span>
-                        </div>
-                        <div className="h-4 w-full bg-white/5 relative rounded-full overflow-hidden border border-[#00f3ff]/20 p-1">
-                           <div className="h-full bg-gradient-to-r from-red-600 via-[#00f3ff] to-green-600 shadow-[0_0_30px_rgba(0,243,255,0.8)] transition-all duration-[2000ms] rounded-full" style={{ width: `${(elapsedTime % 30 / 30) * 100}%` }} />
+                     
+                     <div className="mt-auto pt-4 border-t border-[#00f3ff]/10">
+                        <div className="flex justify-between text-[9px] md:text-[12px] font-black uppercase tracking-[0.2em] md:tracking-[0.8em] text-[#00f3ff]/60">
+                           <span>DURATION</span>
+                           <span className="text-white tabular-nums">{Math.floor(elapsedTime / 60)}:{String(elapsedTime % 60).padStart(2, '0')}</span>
                         </div>
                      </div>
                   </div>
                </div>
-               <div className="w-80 border-l border-white/5 bg-black/80 flex flex-col p-8 gap-6 z-10 backdrop-blur-3xl shadow-2xl overflow-hidden">
-                  <div className="flex items-center gap-3 border-b border-[#00f3ff]/30 pb-4">
-                     <Activity size={20} className="text-[#00f3ff]" />
-                     <span className="text-[12px] font-black uppercase tracking-[0.5em] text-[#00f3ff]">SYSTEM_LOGGER</span>
+
+               {/* Logger - Responsive positioning */}
+               <div className="w-full md:w-80 border-t md:border-t-0 md:border-l border-white/5 bg-black/80 flex flex-col p-4 md:p-8 gap-4 z-10 backdrop-blur-3xl shadow-2xl h-64 md:h-auto">
+                  <div className="flex items-center gap-3 border-b border-[#00f3ff]/30 pb-2 md:pb-4">
+                     <Activity size={16} md:size={20} className="text-[#00f3ff]" />
+                     <span className="text-[10px] md:text-[12px] font-black uppercase tracking-[0.3em] md:tracking-[0.5em] text-[#00f3ff]">LOGGER</span>
                   </div>
-                  <div className="flex-1 overflow-y-auto space-y-7 custom-scrollbar pr-3">
+                  <div className="flex-1 overflow-y-auto space-y-4 md:space-y-7 custom-scrollbar pr-2">
                      {logs.map(log => (
-                        <div key={log.id} className={`text-[11px] uppercase border-l-3 pl-6 py-2 animate-in slide-in-from-right-10 duration-300 ${log.type === 'success' ? 'border-green-600 text-green-400' : log.type === 'warn' ? 'border-red-600 text-red-400' : 'border-[#00f3ff]/40 text-[#00f3ff]/60'}`}>
-                           <p className="font-black leading-tight tracking-tight mb-1">{log.text}</p>
-                           <span className="text-[9px] opacity-30 font-bold">{new Date().toLocaleTimeString()}</span>
+                        <div key={log.id} className={`text-[9px] md:text-[11px] uppercase border-l-2 md:border-l-3 pl-3 md:pl-6 py-1 md:py-2 ${log.type === 'success' ? 'border-green-600 text-green-400' : log.type === 'warn' ? 'border-red-600 text-red-400' : 'border-[#00f3ff]/40 text-[#00f3ff]/60'}`}>
+                           <p className="font-black leading-tight tracking-tight">{log.text}</p>
                         </div>
                      ))}
                   </div>
@@ -437,30 +426,29 @@ export const GameView: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="max-w-7xl mx-auto py-24 px-16 w-full h-full overflow-y-auto custom-scrollbar">
+          <div className="max-w-7xl mx-auto py-8 md:py-24 px-4 md:px-16 w-full h-full overflow-y-auto custom-scrollbar">
             {activeTab === 'profile' && (
-              <div className="space-y-24 animate-in slide-in-from-bottom-16 duration-1000">
-                <div className="flex flex-col lg:flex-row items-center gap-24 p-24 bg-white/[0.01] border-2 border-[#00f3ff]/20 relative overflow-hidden group rounded-lg shadow-2xl backdrop-blur-md">
+              <div className="space-y-12 md:space-y-24 animate-in slide-in-from-bottom-8 duration-700">
+                <div className="flex flex-col lg:flex-row items-center gap-8 md:gap-24 p-6 md:p-24 bg-white/[0.01] border-2 border-[#00f3ff]/20 relative overflow-hidden group rounded-lg shadow-2xl backdrop-blur-md">
                   <div className="relative shrink-0">
-                    <div className="absolute inset-0 bg-[#00f3ff] blur-[160px] opacity-10 group-hover:opacity-30 transition-opacity duration-1000" />
-                    <div className="relative w-72 h-72 border-4 border-[#00f3ff]/40 p-5 bg-black flex items-center justify-center overflow-hidden rounded-sm">
-                       <User size={160} className="text-[#00f3ff]/10" />
-                       <div className="absolute top-0 left-0 w-full h-1 bg-[#00f3ff] animate-scanline shadow-[0_0_20px_#00f3ff]" />
+                    <div className="absolute inset-0 bg-[#00f3ff] blur-[80px] md:blur-[160px] opacity-10" />
+                    <div className="relative w-32 h-32 md:w-72 md:h-72 border-2 md:border-4 border-[#00f3ff]/40 p-2 md:p-5 bg-black flex items-center justify-center overflow-hidden rounded-sm">
+                       <User size={64} md:size={160} className="text-[#00f3ff]/10" />
                     </div>
                   </div>
-                  <div className="space-y-12 relative z-10 flex-1 text-center lg:text-left">
-                    <div className="space-y-5">
-                       <span className="text-[13px] text-[#00f3ff]/40 font-black uppercase tracking-[1em] block animate-pulse">Root_Access_Administrator</span>
-                       <h2 className="text-9xl font-black text-white italic uppercase tracking-tighter neon-glow-cyan leading-none">ADMIN_77</h2>
+                  <div className="space-y-6 md:space-y-12 relative z-10 flex-1 text-center lg:text-left">
+                    <div className="space-y-2 md:space-y-5">
+                       <span className="text-[10px] md:text-[13px] text-[#00f3ff]/40 font-black uppercase tracking-[0.5em] md:tracking-[1em] block">ROOT_ADMIN</span>
+                       <h2 className="text-4xl md:text-9xl font-black text-white italic uppercase tracking-tighter neon-glow-cyan leading-none">ADMIN_77</h2>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
-                      <div className="flex flex-col border-l-8 border-[#00f3ff] pl-12 py-5 bg-white/[0.02] backdrop-blur-md hover:bg-[#00f3ff]/5 transition-all group/stat cursor-default">
-                        <span className="text-[12px] text-[#00f3ff]/60 font-black uppercase tracking-[0.6em] mb-5">MIKELA_VAL_RESERVES</span>
-                        <span className="text-7xl font-black text-white tracking-tighter tabular-nums group-hover/stat:neon-glow-cyan transition-all">{mikelaReserves.toLocaleString()} MK</span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-16">
+                      <div className="flex flex-col border-l-4 md:border-l-8 border-[#00f3ff] pl-4 md:pl-12 py-2 md:py-5 bg-white/[0.02] backdrop-blur-md">
+                        <span className="text-[9px] md:text-[12px] text-[#00f3ff]/60 font-black uppercase tracking-[0.3em] md:tracking-[0.6em] mb-1 md:mb-5">RESERVES</span>
+                        <span className="text-2xl md:text-7xl font-black text-white tracking-tighter tabular-nums">{mikelaReserves.toLocaleString()} MK</span>
                       </div>
-                      <div className="flex flex-col border-l-8 border-[#ff00ff] pl-12 py-5 bg-white/[0.02] backdrop-blur-md hover:bg-[#ff00ff]/5 transition-all group/stat cursor-default">
-                        <span className="text-[12px] text-[#ff00ff]/60 font-black uppercase tracking-[0.6em] mb-5">REPUTATION_RANK</span>
-                        <span className="text-7xl font-black text-white tracking-tighter tabular-nums group-hover/stat:neon-glow-pink transition-all">{reputation.toLocaleString()} XP</span>
+                      <div className="flex flex-col border-l-4 md:border-l-8 border-[#ff00ff] pl-4 md:pl-12 py-2 md:py-5 bg-white/[0.02] backdrop-blur-md">
+                        <span className="text-[9px] md:text-[12px] text-[#ff00ff]/60 font-black uppercase tracking-[0.3em] md:tracking-[0.6em] mb-1 md:mb-5">REPUTATION</span>
+                        <span className="text-2xl md:text-7xl font-black text-white tracking-tighter tabular-nums">{reputation.toLocaleString()} XP</span>
                       </div>
                     </div>
                   </div>
@@ -469,48 +457,44 @@ export const GameView: React.FC = () => {
             )}
 
             {activeTab === 'expeditions' && (
-              <div className="h-full flex flex-col items-center justify-center space-y-28 animate-in zoom-in duration-1000">
-                <div className="w-full max-w-5xl text-center space-y-28 relative">
-                  <div className="absolute inset-0 bg-[#00f3ff] blur-[250px] opacity-10 animate-pulse pointer-events-none" />
-                  <Compass size={240} className="text-[#00f3ff] mx-auto relative drop-shadow-[0_0_100px_rgba(0,243,255,0.7)] animate-spin-slow group-hover:animate-spin transition-all" />
-                  <div className="space-y-14 relative">
-                    <h2 className="text-9xl font-black text-white uppercase italic tracking-[0.6em] leading-tight neon-glow-cyan">PRONIKNOUT</h2>
-                    <p className="text-xl text-[#00f3ff]/60 max-w-4xl mx-auto leading-relaxed tracking-[0.5em] uppercase font-black text-center">
-                      Vstup vyžaduje rotační video-autorizaci. <br/> 
-                      <span className="text-[#ff00ff] neon-glow-pink">ROTAČNÍ CYKLUS: 60 SEKUND</span>.
+              <div className="h-full flex flex-col items-center justify-center space-y-12 md:space-y-28 animate-in zoom-in duration-700 text-center">
+                <div className="w-full max-w-5xl space-y-8 md:space-y-28 relative px-4">
+                  <Compass size={120} md:size={240} className="text-[#00f3ff] mx-auto drop-shadow-[0_0_50px_rgba(0,243,255,0.7)] animate-spin-slow" />
+                  <div className="space-y-4 md:space-y-14">
+                    <h2 className="text-4xl md:text-9xl font-black text-white uppercase italic tracking-[0.2em] md:tracking-[0.6em] neon-glow-cyan">LAUNCH</h2>
+                    <p className="text-xs md:text-xl text-[#00f3ff]/60 leading-relaxed tracking-[0.2em] md:tracking-[0.5em] uppercase font-black">
+                      Vstup vyžaduje autorizaci. <br/> 
+                      <span className="text-[#ff00ff]">CYKLUS: 60s</span>
                     </p>
                   </div>
                   <button 
                     onClick={startExpedition}
-                    className="group relative px-56 py-16 border-4 border-[#00f3ff] overflow-hidden transition-all hover:bg-[#00f3ff] hover:text-black hover:scale-110 active:scale-95 shadow-[0_0_140px_rgba(0,243,255,0.4)] rounded-sm"
+                    className="group relative px-12 md:px-56 py-6 md:py-16 border-2 md:border-4 border-[#00f3ff] overflow-hidden transition-all hover:bg-[#00f3ff] hover:text-black active:scale-95 shadow-[0_0_40px_rgba(0,243,255,0.4)] rounded-sm w-full md:w-auto"
                   >
-                    <div className="relative z-10 flex items-center gap-12">
-                       <PlayCircle size={56} className="animate-pulse" />
-                       <span className="text-6xl font-black uppercase tracking-[1em]">LAUNCH_EXPEDITION</span>
-                    </div>
+                    <span className="relative z-10 text-xl md:text-6xl font-black uppercase tracking-[0.2em] md:tracking-[1em]">EXPEDICE</span>
                   </button>
                 </div>
               </div>
             )}
 
             {activeTab === 'items' && (
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-20 animate-in slide-in-from-right-16 duration-1000">
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-20 animate-in slide-in-from-right-8 duration-700">
                   {upgrades.map(u => {
                     const cost = Math.floor(u.baseCost * Math.pow(1.7, u.level - 1));
                     const canAfford = mikelaReserves >= cost;
                     return (
-                      <div key={u.id} className={`p-20 border-2 transition-all duration-700 flex flex-col bg-white/[0.01] group relative rounded-md shadow-xl ${canAfford ? 'border-[#00f3ff]/20 hover:border-[#ff00ff]/60 hover:bg-white/[0.04]' : 'border-white/5 opacity-40 grayscale pointer-events-none'}`}>
-                        <div className="flex justify-between items-start mb-20">
-                          <div className="w-36 h-36 bg-black border-2 border-white/10 flex items-center justify-center shadow-[inset_0_0_60px_rgba(0,243,255,0.06)] group-hover:border-[#ff00ff]/50 transition-all rounded-sm">
-                            <u.icon className={canAfford ? 'text-[#ff00ff] group-hover:scale-125 transition-transform duration-500' : 'text-white/10'} size={72} />
+                      <div key={u.id} className={`p-6 md:p-20 border-2 transition-all duration-300 flex flex-col bg-white/[0.01] rounded-md shadow-xl ${canAfford ? 'border-[#00f3ff]/20 hover:border-[#ff00ff]/60' : 'border-white/5 opacity-40 grayscale pointer-events-none'}`}>
+                        <div className="flex justify-between items-start mb-6 md:mb-20">
+                          <div className="w-16 h-16 md:w-36 md:h-36 bg-black border-2 border-white/10 flex items-center justify-center">
+                            <u.icon className={canAfford ? 'text-[#ff00ff]' : 'text-white/10'} size={32} md:size={72} />
                           </div>
                           <div className="text-right">
-                             <span className="text-[14px] text-white/40 font-black uppercase tracking-[0.6em] block mb-5">PROTOCOL_RANK</span>
-                             <span className="text-8xl font-black text-[#ff00ff] italic group-hover:neon-glow-pink transition-all duration-500">v{u.level}</span>
+                             <span className="text-[10px] md:text-[14px] text-white/40 font-black uppercase tracking-widest block mb-1">RANK</span>
+                             <span className="text-3xl md:text-8xl font-black text-[#ff00ff] italic">v{u.level}</span>
                           </div>
                         </div>
-                        <h4 className="text-6xl font-black text-white uppercase mb-10 tracking-tighter group-hover:text-[#ff00ff] transition-colors duration-500 italic">{u.name}</h4>
-                        <p className="text-base text-white/30 uppercase mb-24 leading-relaxed tracking-[0.35em] font-black">{u.desc}</p>
+                        <h4 className="text-2xl md:text-6xl font-black text-white uppercase mb-2 md:mb-10 tracking-tighter italic">{u.name}</h4>
+                        <p className="text-[10px] md:text-base text-white/30 uppercase mb-8 md:mb-24 leading-relaxed tracking-widest font-black">{u.desc}</p>
                         <button 
                           onClick={() => {
                             if(canAfford) {
@@ -518,9 +502,9 @@ export const GameView: React.FC = () => {
                               setUpgrades(prev => prev.map(item => item.id === u.id ? {...item, level: item.level+1} : item));
                             }
                           }}
-                          className={`w-full py-14 border-4 font-black text-xl uppercase tracking-[0.8em] transition-all mt-auto flex items-center justify-center gap-10 shadow-2xl rounded-sm ${canAfford ? 'border-[#ff00ff] text-[#ff00ff] hover:bg-[#ff00ff] hover:text-black shadow-[0_0_40px_rgba(255,0,255,0.3)]' : 'border-white/10 text-white/10'}`}
+                          className={`w-full py-4 md:py-14 border-2 md:border-4 font-black text-xs md:text-xl uppercase tracking-[0.2em] md:tracking-[0.8em] transition-all mt-auto flex items-center justify-center gap-4 ${canAfford ? 'border-[#ff00ff] text-[#ff00ff] hover:bg-[#ff00ff] hover:text-black' : 'border-white/10 text-white/10'}`}
                         >
-                          {canAfford ? <>UPGRADE | {cost.toLocaleString()} MK</> : <><Lock size={32} /> REZERVY_LOW</>}
+                          {canAfford ? <>{cost.toLocaleString()} MK</> : <><Lock size={16} md:size={32} /></>}
                         </button>
                       </div>
                     )
@@ -531,22 +515,33 @@ export const GameView: React.FC = () => {
         )}
       </main>
 
+      {/* Bottom Navigation for Mobile */}
+      <nav className="md:hidden fixed bottom-0 left-0 w-full h-16 border-t border-[#00f3ff]/20 bg-black/90 backdrop-blur-xl flex items-center justify-around px-2 z-[60]">
+         {navItems.map((item) => (
+            <button
+               key={item.id}
+               onClick={() => { setActiveTab(item.id); if(!activeExpedition) setActiveExpedition(false); }}
+               className={`flex flex-col items-center justify-center gap-1 transition-all duration-300 ${activeTab === item.id ? 'text-[#00f3ff] scale-110' : 'text-white/30'}`}
+            >
+               <item.icon size={20} />
+               <span className="text-[8px] font-black uppercase tracking-widest">{item.label}</span>
+               {activeTab === item.id && <div className="absolute -bottom-1 w-8 h-[2px] bg-[#00f3ff] shadow-[0_0_10px_#00f3ff]" />}
+            </button>
+         ))}
+      </nav>
+
       <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; md:width: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #00f3ff22; border-radius: 20px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #00f3ff55; }
         .tactical-grid {
           background-image: linear-gradient(#00f3ff 1px, transparent 1px), linear-gradient(90deg, #00f3ff 1px, transparent 1px);
-          background-size: 60px 60px;
+          background-size: 30px 30px; md:background-size: 60px 60px;
         }
-        .animate-spin-slow { animation: spin 30s linear infinite; }
+        .animate-spin-slow { animation: spin 20s md:30s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes loading-bar { 0% { transform: translateX(-100%); } 100% { transform: translateX(600%); } }
-        .animate-loading-bar { animation: loading-bar 4.5s infinite linear; }
-        .neon-glow-cyan { text-shadow: 0 0 15px #00f3ff, 0 0 30px #00f3ff; }
-        .neon-glow-pink { text-shadow: 0 0 15px #ff00ff, 0 0 30px #ff00ff; }
-        @keyframes glitch { 0% { transform: translate(0); text-shadow: -2px 0 #ff00ff, 2px 0 #00f3ff; } 50% { transform: translate(1px, -1px); text-shadow: 2px 0 #ff00ff, -2px 0 #00f3ff; } 100% { transform: translate(0); } }
+        .neon-glow-cyan { text-shadow: 0 0 10px #00f3ff; md:text-shadow: 0 0 15px #00f3ff, 0 0 30px #00f3ff; }
+        @keyframes glitch { 0% { transform: translate(0); text-shadow: -1px 0 #ff00ff, 1px 0 #00f3ff; } 50% { transform: translate(1px, -1px); text-shadow: 1px 0 #ff00ff, -1px 0 #00f3ff; } 100% { transform: translate(0); } }
         .glitch-text { position: relative; display: inline-block; animation: glitch 3s infinite linear alternate-reverse; }
       `}</style>
     </div>
