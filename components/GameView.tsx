@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Compass, Truck, Timer, Shield, Activity, Clock, Database, PlayCircle, Lock, Signal, Sword, Cpu, Wifi, RefreshCw, LogOut, Database as MiningIcon, Swords, Target, Binary } from 'lucide-react';
+import { User, Compass, Truck, Timer, Shield, Activity, Clock, Database, PlayCircle, Lock, Signal, Sword, Cpu, Wifi, RefreshCw, LogOut, Database as MiningIcon, Swords, Target, Binary, FlaskConical, Biohazard, Zap, Wind, ShieldCheck } from 'lucide-react';
 
 // Interfaces
 interface UpgradeItem {
@@ -34,7 +34,7 @@ declare global {
   }
 }
 
-type GameTab = 'profile' | 'expeditions' | 'arena' | 'items';
+type GameTab = 'profile' | 'expeditions' | 'arena' | 'chemist';
 type ExpeditionPhase = 'COMBAT' | 'HARVESTING' | 'STABILIZING' | 'COMPLETED' | 'FAILED';
 
 // Rotace partnerů: Clickadilla1 na 1., Clickadilla2 na 7., ostatní prokládáno iframe tubecore
@@ -230,15 +230,15 @@ const VideoStation: React.FC<{
 };
 
 export const GameView: React.FC<{ userAvatar?: string | null }> = ({ userAvatar }) => {
-  const [activeTab, setActiveTab] = useState<GameTab>('profile');
+  const [activeTab, setActiveTab] = useState<GameTab>('arena');
   const [mikelaReserves, setMikelaReserves] = useState(150);
   const [reputation, setReputation] = useState(1240);
   const [rank, setRank] = useState(1);
   const [upgrades, setUpgrades] = useState<UpgradeItem[]>([
-    { id: 'atk', name: 'Útočný Protokol', icon: Sword, level: 1, baseCost: 50, desc: 'Zvyšuje efektivitu v bojové fázi expedice.' },
-    { id: 'spd', name: 'Tachyonový Pohon', icon: Compass, level: 1, baseCost: 40, desc: 'Zkracuje časovou náročnost operací.' },
-    { id: 'trns', name: 'Datový Uzel', icon: Truck, level: 1, baseCost: 30, desc: 'Zvyšuje rychlost sběru fragmentů.' },
-    { id: 'tm', name: 'Forging Modul', icon: Timer, level: 1, baseCost: 60, desc: 'Zvyšuje výnos MIKELA z každé mise.' },
+    { id: 'neuro', name: 'Neuro-Stimulant', icon: Zap, level: 1, baseCost: 50, desc: 'Zvyšuje syntézu neuronů, což vede k rychlejšímu zisku XP reputace.' },
+    { id: 'speed', name: 'Sérum Rychlosti', icon: Wind, level: 1, baseCost: 45, desc: 'Urychluje přenos dat v Matrixu a zkracuje reakční časy uživatele.' },
+    { id: 'reflex', name: 'Adrenalinový Shot', icon: Activity, level: 1, baseCost: 30, desc: 'Dočasně zvyšuje reflexy a útočnou sílu v simulacích Arény.' },
+    { id: 'filter', name: 'Bio-Filtr', icon: ShieldCheck, level: 1, baseCost: 55, desc: 'Pokročilá filtrace zabraňující průniku škodlivého kódu do vědomí.' },
   ]);
 
   const [activeExpedition, setActiveExpedition] = useState(false);
@@ -273,7 +273,7 @@ export const GameView: React.FC<{ userAvatar?: string | null }> = ({ userAvatar 
   useEffect(() => {
     if (arenaPhase === 'FIGHTING' && activeArenaBattle) {
       const battleTimer = setInterval(() => {
-        const playerAtk = (upgrades.find(u => u.id === 'atk')!.level * 10) + (rank * 2);
+        const playerAtk = (upgrades.find(u => u.id === 'reflex')!.level * 10) + (rank * 2);
         const enemyAtk = Math.max(5, activeArenaBattle.power / 20);
         
         setEnemyHp(prev => Math.max(0, prev - playerAtk));
@@ -346,7 +346,7 @@ export const GameView: React.FC<{ userAvatar?: string | null }> = ({ userAvatar 
         else setPhase('STABILIZING');
 
         if (next > 0 && next % 30 === 0) {
-          const bonusMultiplier = 1 + (upgrades.find(u => u.id === 'tm')!.level * 0.15);
+          const bonusMultiplier = 1 + (upgrades.find(u => u.id === 'reflex')!.level * 0.15);
           const totalReward = Math.floor(4 * bonusMultiplier);
           setMikelaReserves(p => p + totalReward);
           addLog(`Generováno +${totalReward} MK.`, 'success');
@@ -361,7 +361,7 @@ export const GameView: React.FC<{ userAvatar?: string | null }> = ({ userAvatar 
     { id: 'profile' as GameTab, icon: User, label: 'Profil' },
     { id: 'expeditions' as GameTab, icon: Compass, label: 'Expedice' },
     { id: 'arena' as GameTab, icon: Swords, label: 'Aréna' },
-    { id: 'items' as GameTab, icon: Shield, label: 'Arzenál' },
+    { id: 'chemist' as GameTab, icon: FlaskConical, label: 'Chemik' },
   ];
 
   return (
@@ -563,9 +563,9 @@ export const GameView: React.FC<{ userAvatar?: string | null }> = ({ userAvatar 
                           </div>
                           <button 
                             onClick={() => startPvP(o)}
-                            className="w-full py-4 bg-transparent border-2 border-[#ff00ff] text-[#ff00ff] font-black uppercase tracking-[0.5em] hover:bg-[#ff00ff] hover:text-black transition-all"
+                            className="w-full py-4 bg-transparent border-2 border-[#ff00ff] text-[#ff00ff] font-black uppercase tracking-[0.5em] hover:bg-[#ff00ff] hover:text-black transition-all shadow-[0_0_15px_rgba(255,0,255,0.1)] active:scale-95"
                           >
-                            CHALLENGE
+                            VSTOUPIT DO BOJE
                           </button>
                        </div>
                      ))}
@@ -649,38 +649,48 @@ export const GameView: React.FC<{ userAvatar?: string | null }> = ({ userAvatar 
               </div>
             )}
 
-            {activeTab === 'items' && (
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 animate-in slide-in-from-right-8 duration-700">
-                  {upgrades.map(u => {
-                    const cost = Math.floor(u.baseCost * Math.pow(1.7, u.level - 1));
-                    const canAfford = mikelaReserves >= cost;
-                    return (
-                      <div key={u.id} className={`p-6 md:p-12 border-2 transition-all duration-300 flex flex-col bg-white/[0.01] rounded-md shadow-xl ${canAfford ? 'border-[#00f3ff]/20 hover:border-[#ff00ff]/60' : 'border-white/5 opacity-40 grayscale pointer-events-none'}`}>
-                        <div className="flex justify-between items-start mb-6 md:mb-10">
-                          <div className="w-16 h-16 md:w-24 md:h-24 bg-black border-2 border-white/10 flex items-center justify-center">
-                            <u.icon className={canAfford ? 'text-[#ff00ff]' : 'text-white/10'} size={32} md:size={48} />
-                          </div>
-                          <div className="text-right">
-                             <span className="text-[10px] text-white/40 font-black uppercase tracking-widest block mb-1">RANK</span>
-                             <span className="text-3xl md:text-5xl font-black text-[#ff00ff] italic">v{u.level}</span>
-                          </div>
-                        </div>
-                        <h4 className="text-xl md:text-3xl font-black text-white uppercase mb-2 md:mb-4 tracking-tighter italic">{u.name}</h4>
-                        <p className="text-[10px] text-white/30 uppercase mb-8 leading-relaxed tracking-widest font-black">{u.desc}</p>
-                        <button 
-                          onClick={() => {
-                            if(canAfford) {
-                              setMikelaReserves(p => p - cost);
-                              setUpgrades(prev => prev.map(item => item.id === u.id ? {...item, level: item.level+1} : item));
-                            }
-                          }}
-                          className={`w-full py-4 border-2 md:border-3 font-black text-xs md:text-sm uppercase tracking-[0.2em] md:tracking-[0.4em] transition-all mt-auto flex items-center justify-center gap-4 ${canAfford ? 'border-[#ff00ff] text-[#ff00ff] hover:bg-[#ff00ff] hover:text-black' : 'border-white/10 text-white/10'}`}
-                        >
-                          {canAfford ? <>{cost.toLocaleString()} MK</> : <><Lock size={16} /></>}
-                        </button>
-                      </div>
-                    )
-                  })}
+            {activeTab === 'chemist' && (
+               <div className="space-y-8 md:space-y-12 animate-in slide-in-from-right-8 duration-700">
+                  <div className="flex items-center gap-4 border-b border-[#39ff14]/30 pb-6 mb-8">
+                     <Biohazard size={32} className="text-[#39ff14] animate-pulse" />
+                     <div>
+                        <h3 className="text-3xl font-black text-white uppercase italic tracking-tighter leading-none">BIO_LABORATOŘ</h3>
+                        <span className="text-[10px] text-[#39ff14]/60 font-black uppercase tracking-[0.4em]">HAZARD_LEVEL: OMEGA</span>
+                     </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
+                     {upgrades.map(u => {
+                       const cost = Math.floor(u.baseCost * Math.pow(1.7, u.level - 1));
+                       const canAfford = mikelaReserves >= cost;
+                       return (
+                         <div key={u.id} className={`p-6 md:p-12 border-2 transition-all duration-300 flex flex-col bg-black rounded-md shadow-xl ${canAfford ? 'border-[#39ff14]/20 hover:border-[#39ff14]/60' : 'border-white/5 opacity-40 grayscale pointer-events-none'}`}>
+                           <div className="flex justify-between items-start mb-6 md:mb-10">
+                             <div className="w-16 h-16 md:w-24 md:h-24 bg-black border-2 border-[#39ff14]/10 flex items-center justify-center">
+                               <u.icon className={canAfford ? 'text-[#39ff14]' : 'text-white/10'} size={32} md:size={48} />
+                             </div>
+                             <div className="text-right">
+                                <span className="text-[10px] text-white/40 font-black uppercase tracking-widest block mb-1">STUPEŇ</span>
+                                <span className="text-3xl md:text-5xl font-black text-[#39ff14] italic">v{u.level}</span>
+                             </div>
+                           </div>
+                           <h4 className="text-xl md:text-3xl font-black text-white uppercase mb-2 md:mb-4 tracking-tighter italic">{u.name}</h4>
+                           <p className="text-[10px] text-white/30 uppercase mb-8 leading-relaxed tracking-widest font-black">{u.desc}</p>
+                           <button 
+                             onClick={() => {
+                               if(canAfford) {
+                                 setMikelaReserves(p => p - cost);
+                                 setUpgrades(prev => prev.map(item => item.id === u.id ? {...item, level: item.level+1} : item));
+                                 addLog(`CHEMIST_UP: ${u.name} v${u.level + 1}`, 'success');
+                               }
+                             }}
+                             className={`w-full py-4 border-2 md:border-3 font-black text-xs md:text-sm uppercase tracking-[0.2em] md:tracking-[0.4em] transition-all mt-auto flex items-center justify-center gap-4 active:scale-95 ${canAfford ? 'border-[#39ff14] text-[#39ff14] hover:bg-[#39ff14] hover:text-black shadow-[0_0_15px_rgba(57,255,20,0.2)]' : 'border-white/10 text-white/10'}`}
+                           >
+                             {canAfford ? <>{cost.toLocaleString()} MK</> : <><Lock size={16} /></>}
+                           </button>
+                         </div>
+                       )
+                     })}
+                  </div>
                </div>
             )}
           </div>
