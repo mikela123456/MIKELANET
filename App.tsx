@@ -8,8 +8,9 @@ import { Navigation } from './components/Navigation';
 import { Dashboard } from './components/Dashboard';
 import { GameView } from './components/GameView';
 import { AgeGate } from './components/AgeGate';
+import { GlitchLab } from './components/GlitchLab';
 
-type ViewState = 'LANDING' | 'DASHBOARD' | 'GAME';
+type ViewState = 'LANDING' | 'DASHBOARD' | 'GAME' | 'LAB';
 
 const App: React.FC = () => {
   const [time, setTime] = useState<string>(new Date().toLocaleTimeString('cs-CZ', { hour12: false }));
@@ -17,6 +18,7 @@ const App: React.FC = () => {
   const [showAuth, setShowAuth] = useState(false);
   const [showAgeGate, setShowAgeGate] = useState(false);
   const [currentView, setCurrentView] = useState<ViewState>('LANDING');
+  const [userAvatar, setUserAvatar] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -38,6 +40,10 @@ const App: React.FC = () => {
 
   const enterGame = () => {
     setCurrentView('GAME');
+  };
+
+  const enterLab = () => {
+    setCurrentView('LAB');
   };
 
   const handleVerifyAge = () => {
@@ -62,14 +68,34 @@ const App: React.FC = () => {
           <Navigation onLogout={handleLogout} />
           
           {/* Main content area with scroll support */}
-          <div className="flex-1 w-full h-full pt-16 overflow-hidden">
+          <div className="flex-1 w-full h-full pt-16 overflow-hidden relative">
             {currentView === 'DASHBOARD' && (
               <Dashboard onEnterGame={enterGame} />
             )}
             
             {currentView === 'GAME' && (
-              <GameView />
+              <GameView userAvatar={userAvatar} />
             )}
+
+            {currentView === 'LAB' && (
+              <GlitchLab onSyncAvatar={(url) => setUserAvatar(url)} />
+            )}
+
+            {/* Lab Access Toggle (Internal) */}
+            <div className="absolute bottom-4 left-4 z-[70] flex gap-2">
+               <button 
+                  onClick={() => setCurrentView('DASHBOARD')}
+                  className={`px-4 py-1 text-[8px] font-black uppercase tracking-widest border transition-all ${currentView === 'DASHBOARD' ? 'bg-[#00f3ff] text-black border-[#00f3ff]' : 'border-[#00f3ff]/40 text-[#00f3ff] hover:bg-[#00f3ff]/10'}`}
+               >
+                 Dash
+               </button>
+               <button 
+                  onClick={enterLab}
+                  className={`px-4 py-1 text-[8px] font-black uppercase tracking-widest border transition-all ${currentView === 'LAB' ? 'bg-[#ff00ff] text-black border-[#ff00ff]' : 'border-[#ff00ff]/40 text-[#ff00ff] hover:bg-[#ff00ff]/10'}`}
+               >
+                 OS_Lab
+               </button>
+            </div>
           </div>
         </div>
       ) : (
@@ -107,7 +133,7 @@ const App: React.FC = () => {
         />
       )}
 
-      <div className="absolute bottom-6 border border-[#ff00ff] px-8 py-2 bg-black/40 backdrop-blur-sm z-20 pointer-events-none">
+      <div className="absolute bottom-6 border border-[#ff00ff] px-8 py-2 bg-black/40 backdrop-blur-sm z-20 pointer-events-none right-6">
         <span className="text-[#ff00ff] font-bold tracking-[0.2em] text-xl">
           {time} CET
         </span>
